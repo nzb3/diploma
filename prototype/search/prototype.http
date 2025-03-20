@@ -1,0 +1,28 @@
+### POST request save a document
+POST /documents HTTP/1.1
+Host: localhost:8080
+Content-Type: application/json
+
+{
+  "content": "Go offers several powerful libraries and tools for working with Markdown, making it easy to parse, generate, and render Markdown content in your applications.\n\n## Markdown Libraries in Go\n\n### Markdown Parsers\nThe `blackfriday` library is a popular Markdown processor for Go that converts Markdown text into HTML. It's used in projects like the example Markdown parser that processes basic syntax elements including headings, lists, emphasis, and more[1].\n\nFor terminal rendering, `go-term-markdown` provides a specialized renderer that adapts Markdown for terminal display with features like formatting, lists, tables, images, code blocks with syntax highlighting, and basic HTML support[3].\n\n### Markdown Builders\nSeveral Go packages implement builder patterns for generating Markdown:\n\n- The `markdown` package by nao1215 is a simple Markdown builder that uses method chaining rather than templates. It supports GitHub Markdown syntax including headings, lists, code blocks, tables, and even Mermaid diagrams for visualizations[6].\n\n- A similar library by go-spectest provides an intuitive way to generate Markdown with a fluent API, supporting basic formatting like headers, lists, code blocks, and tables[4].\n\nExample code using the builder pattern:\n```go\nmd.NewMarkdown(os.Stdout).\n  H1(\"This is H1\").\n  PlainText(\"This is plain text\").\n  H2f(\"This is %s with text format\", \"H2\").\n  CodeBlocks(md.SyntaxHighlightGo, `package main\nimport \"fmt\"\nfunc main() {\n  fmt.Println(\"Hello, World!\")\n}`).\n  Build()\n```\n\n## Documentation Tools\n\nFor Go documentation, specialized tools exist:\n\n- `godocdown` generates GitHub-friendly Markdown documentation for Go packages, making it ideal for creating README files for GitHub repositories[2].\n\n- `gomarkdoc` formats documentation for Go packages as Markdown for usage outside of pkg.go.dev, with options for embedding documentation into existing files[5].\n\n## Practical Applications\n\nMarkdown is commonly used in Go applications for:\n\n1. Blog engines that parse Markdown files for content, as demonstrated in a project using Go and HTMX to build a Markdown blog[8].\n\n2. Documentation generation for Go packages and projects.\n\n3. Creating dynamic content for web applications.\n\nIDEs like GoLand provide built-in support for Markdown, including editing, previewing, and reformatting capabilities[7].\n\nThe combination of Go's performance with Markdown's simplicity makes it an excellent choice for content management systems, documentation tools, and any application that needs to generate formatted text output.\n\nCitations:\n[1] https://reintech.io/blog/writing-a-go-based-markdown-parser\n[2] https://github.com/robertkrimen/godocdown\n[3] https://github.com/MichaelMure/go-term-markdown\n[4] https://www.reddit.com/r/golang/comments/17d6j00/simple_markdown_builder_in_golang/\n[5] https://github.com/princjef/gomarkdoc\n[6] https://github.com/nao1215/markdown\n[7] https://www.jetbrains.com/help/go/markdown.html\n[8] https://fluxsec.red/how-I-developed-a-markdown-blog-with-go-and-HTMX\n[9] https://www.reddit.com/r/golang/comments/rh8nfw/i_wrote_a_lightweight_markup_language_in_go_sorta/\n[10] https://pkg.go.dev/github.com/princjef/gomarkdoc/cmd/gomarkdoc\n[11] https://tip.golang.org/doc/comment\n[12] https://pkg.go.dev/rsc.io/markdown\n[13] https://github.com/gomarkdown/markdown\n[14] https://larafast.com/tools/doc-fast/go\n[15] https://pkg.go.dev/github.com/gomarkdown/markdown\n[16] https://pkg.go.dev/go/doc/comment\n[17] https://www.zupzup.org/go-markdown-syntax-highlight/index.html\n[18] https://dev.to/nchika/simple-markdown-builder-in-golang-21fp\n\n---\nAnswer from Perplexity: pplx.ai/share",
+  "type": "text"
+}
+
+### POST request Semantic Search
+POST /search HTTP/1.1
+Host: localhost:8080
+Content-Type: application/json
+
+{
+  "query": "Who created Go language?",
+  "max_results": 5
+}
+
+### POST request Ask a Question
+POST /ask HTTP/1.1
+Host: localhost:8080
+Content-Type: application/json
+
+{
+  "question": "tell about documentation golang?"
+}
