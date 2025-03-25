@@ -1,4 +1,4 @@
-package main
+package prototype_v1
 
 import (
 	"context"

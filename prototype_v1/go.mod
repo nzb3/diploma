@@ -1,4 +1,4 @@
-module GoRAG
+module prototype_v1
 
 go 1.24.0
 
