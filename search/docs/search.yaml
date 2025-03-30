@@ -1,0 +1,435 @@
+openapi: 3.0.0
+info:
+  title: Search API
+  description: API for resource management and semantic search functionality
+  version: 1.0.0
+
+servers:
+  - url: localhost:8080/api/v1
+
+paths:
+  /resources:
+    post:
+      summary: Save a new resource
+      description: Uploads a new resource and processes it with server-sent events for progress updates
+      tags:
+        - Resources
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaveDocumentRequest'
+      responses:
+        '200':
+          description: Resource processing started successfully
+          content:
+            text/event-stream:
+              schema:
+                type: object
+                properties:
+                  status_update:
+                    $ref: '#/components/schemas/ResourceEvent'
+                  completed:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    get:
+      summary: Get all resources
+      description: Returns a list of all resources
+      tags:
+        - Resources
+      responses:
+        '200':
+          description: List of resources
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Resource'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /resources/{id}:
+    get:
+      summary: Get a resource by ID
+      description: Returns a specific resource by its UUID
+      tags:
+        - Resources
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Resource UUID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Resource details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Resource'
+        '400':
+          description: Invalid resource ID format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      summary: Delete a resource
+      description: Deletes a specific resource by its UUID
+      tags:
+        - Resources
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Resource UUID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Resource deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '400':
+          description: Invalid resource ID format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /ask:
+    post:
+      summary: Get an answer to a question
+      description: Processes a question and returns an answer with references
+      tags:
+        - Search
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AskRequest'
+      responses:
+        '200':
+          description: Answer to the question
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AskResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /ask/stream:
+    post:
+      summary: Stream an answer to a question
+      description: Processes a question and streams the answer with server-sent events
+      tags:
+        - Search
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AskRequest'
+      responses:
+        '200':
+          description: Streamed answer to the question
+          content:
+            text/event-stream:
+              schema:
+                type: object
+                properties:
+                  chunk:
+                    type: object
+                    properties:
+                      process_id:
+                        type: string
+                        format: uuid
+                      content:
+                        type: string
+                      complete:
+                        type: boolean
+                  complete:
+                    type: object
+                    properties:
+                      process_id:
+                        type: string
+                        format: uuid
+                      result:
+                        $ref: '#/components/schemas/SearchResult'
+                      complete:
+                        type: boolean
+                  error:
+                    type: object
+                    properties:
+                      process_id:
+                        type: string
+                        format: uuid
+                      error:
+                        type: string
+                  cancelled:
+                    type: object
+                    properties:
+                      process_id:
+                        type: string
+                        format: uuid
+                      message:
+                        type: string
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /ask/stream/cancel/{process_id}:
+    delete:
+      summary: Cancel a streaming process
+      description: Cancels an ongoing streaming process by its ID
+      tags:
+        - Search
+      parameters:
+        - name: process_id
+          in: path
+          required: true
+          description: Process UUID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Cancellation requested
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '400':
+          description: Invalid process ID format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Process not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /search:
+    post:
+      summary: Perform semantic search
+      description: Searches for relevant references based on a query
+      tags:
+        - Search
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchRequest'
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    SaveDocumentRequest:
+      type: object
+      required:
+        - content
+        - type
+      properties:
+        content:
+          type: string
+          format: byte
+          description: Content of the document in base64 encoding
+        type:
+          type: string
+          description: Type of the resource
+          enum:
+            - url
+            - pdf
+            - text
+
+    SaveDocumentResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+
+    Resource:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        type:
+          type: string
+          enum:
+            - url
+            - pdf
+            - text
+        source:
+          type: string
+        extracted_content:
+          type: string
+        raw_content:
+          type: string
+          format: byte
+        chunk_ids:
+          type: array
+          items:
+            type: string
+        status:
+          type: string
+          enum:
+            - saved
+            - processed
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ResourceEvent:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+            - saved
+            - processed
+
+    Reference:
+      type: object
+      properties:
+        resource_id:
+          type: string
+          format: uuid
+        content:
+          type: string
+        score:
+          type: number
+          format: float
+
+    SearchResult:
+      type: object
+      properties:
+        answer:
+          type: string
+        references:
+          type: array
+          items:
+            $ref: '#/components/schemas/Reference'
+
+    AskRequest:
+      type: object
+      required:
+        - question
+      properties:
+        question:
+          type: string
+          description: The question to be answered
+
+    AskResponse:
+      type: object
+      properties:
+        result:
+          $ref: '#/components/schemas/SearchResult'
+
+    SearchRequest:
+      type: object
+      required:
+        - query
+      properties:
+        query:
+          type: string
+          description: The search query
+        max_results:
+          type: integer
+          description: Maximum number of results to return
+
+    SearchResponse:
+      type: object
+      properties:
+        references:
+          type: array
+          items:
+            $ref: '#/components/schemas/Reference'
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string

@@ -1,4 +1,4 @@
-package main
+package embedder
 
 import (
 	"context"
@@ -7,27 +7,19 @@ import (
 	"github.com/tmc/langchaingo/llms/ollama"
 )
 
-type embedder struct {
+type Embedder struct {
 	llm *ollama.LLM
 }
 
-func NewEmbedder() (*embedder, error) {
-	llm, err := ollama.New(
-		ollama.WithServerURL("http://ollama-embedder:11434/"),
-		ollama.WithModel("all-minilm"),
-	)
+func NewEmbedder(llm *ollama.LLM) (*Embedder, error) {
 
-	if err != nil {
-		return nil, err
-	}
-
-	return &embedder{
+	return &Embedder{
 		llm: llm,
 	}, nil
 }
 
-func (e *embedder) EmbedDocuments(ctx context.Context, texts []string) ([][]float32, error) {
-	const op = "embedder.EmbedDocuments"
+func (e *Embedder) EmbedDocuments(ctx context.Context, texts []string) ([][]float32, error) {
+	const op = "Embedder.EmbedDocuments"
 
 	embeddedTexts, err := e.llm.CreateEmbedding(ctx, texts)
 	if err != nil {
@@ -38,8 +30,8 @@ func (e *embedder) EmbedDocuments(ctx context.Context, texts []string) ([][]floa
 	return embeddedTexts, nil
 }
 
-func (e *embedder) EmbedQuery(ctx context.Context, query string) ([]float32, error) {
-	const op = "embedder.EmbedQuery"
+func (e *Embedder) EmbedQuery(ctx context.Context, query string) ([]float32, error) {
+	const op = "Embedder.EmbedQuery"
 
 	embeddedQuery, err := e.llm.CreateEmbedding(ctx, []string{query})
 	if err != nil {
