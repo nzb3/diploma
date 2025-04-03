@@ -3,9 +3,7 @@ WORKDIR /app
 
 COPY go.mod go.sum ./
 
-RUN --mount=type=cache,target={$GOPATH}/pkg/mod \
-    --mount=type=cache,target=/root/.cache/go-build \
-    go mod download
+RUN go mod download
 
 COPY . .
 

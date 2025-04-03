@@ -139,15 +139,20 @@ func (sp *serviceProvider) GinEngine(ctx context.Context) *gin.Engine {
 	}
 
 	engine := gin.Default()
-	config := cors.DefaultConfig()
-	config.AllowAllOrigins = true
-	config.AllowMethods = []string{"GET", "POST", "PUT", "OPTIONS"}
-	config.AllowHeaders = []string{"Origin", "Content-Type", "Authorization", "Accept", "User-Agent", "Cache-Control", "Pragma"}
-	config.ExposeHeaders = []string{"Content-Length"}
-	config.AllowCredentials = true
-	config.MaxAge = 12 * time.Hour
 
-	engine.Use(cors.New(config))
+	// Configure CORS to allow frontend requests
+	corsConfig := cors.Config{
+		AllowOrigins:     []string{"http://localhost:5173", "http://localhost:5174", "http://localhost:5175", "http://localhost", "http://localhost:80", "http://front", "http://front:80"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
+		ExposeHeaders:    []string{"Content-Length", "Content-Type"},
+		AllowCredentials: true,
+		MaxAge:           12 * time.Hour,
+	}
+	engine.Use(cors.New(corsConfig))
+
+	engine.Use(gin.Logger())
+	engine.Use(gin.Recovery())
 
 	sp.ginEngine = engine
 	return engine

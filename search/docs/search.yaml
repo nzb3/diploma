@@ -315,6 +315,9 @@ components:
             - url
             - pdf
             - text
+        name:
+          type: string
+          description: Name of the resource
 
     SaveDocumentResponse:
       type: object

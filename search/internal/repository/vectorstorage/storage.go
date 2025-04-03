@@ -227,12 +227,12 @@ func (s *VectorStorage) SemanticSearch(ctx context.Context, query string) ([]mod
 	return parseReferences(docs), nil
 }
 
-func (s *VectorStorage) GetAnswer(ctx context.Context, question string) (models.SearchResult, error) {
+func (s *VectorStorage) GetAnswer(ctx context.Context, question string, refsChan chan<- []models.Reference) (models.SearchResult, error) {
 	const op = "storage.GetAnswer"
 	slog.DebugContext(ctx, "Getting answer",
 		"question", question)
 
-	result, err := s.ask(ctx, question)
+	result, err := s.ask(ctx, question, refsChan)
 	if err != nil {
 		slog.ErrorContext(ctx, "Failed to get answer",
 			"op", op,
@@ -247,12 +247,12 @@ func (s *VectorStorage) GetAnswer(ctx context.Context, question string) (models.
 	return result, nil
 }
 
-func (s *VectorStorage) GetAnswerStream(ctx context.Context, question string, chunks chan<- []byte) (models.SearchResult, error) {
+func (s *VectorStorage) GetAnswerStream(ctx context.Context, question string, refsChan chan<- []models.Reference, chunkChan chan<- []byte) (models.SearchResult, error) {
 	const op = "VectorStorage.GetAnswerStream"
 	slog.DebugContext(ctx, "Starting answer streaming",
 		"question", question)
 
-	result, err := s.ask(ctx, question, chains.WithStreamingFunc(s.streamAnswer(chunks)))
+	result, err := s.ask(ctx, question, refsChan, chains.WithStreamingFunc(s.streamAnswer(chunkChan)))
 	if err != nil {
 		slog.ErrorContext(ctx, "Streaming failed",
 			"op", op,
@@ -266,20 +266,18 @@ func (s *VectorStorage) GetAnswerStream(ctx context.Context, question string, ch
 	return result, err
 }
 
-func (s *VectorStorage) ask(ctx context.Context, question string, opts ...chains.ChainCallOption) (models.SearchResult, error) {
+func (s *VectorStorage) ask(ctx context.Context, question string, refsChan chan<- []models.Reference, opts ...chains.ChainCallOption) (models.SearchResult, error) {
 	const op = "VectorStorage.ask"
-	slog.DebugContext(ctx, "Processing question",
-		"question", question)
+	slog.DebugContext(ctx, "Processing question", "question", question)
 
-	docsChan := make(chan []schema.Document)
+	refs := make([]models.Reference, 0)
 	cb := callback.NewCallbackHandler(
 		callback.WithRetrieverEndFunc(
 			func(ctx context.Context, query string, documents []schema.Document) {
-				slog.DebugContext(ctx, "Retriever completed",
-					"documents_found", len(documents))
+				slog.Info("On retrieving was received documents", "documents_count", len(documents))
+				refs = parseReferences(documents)
 				go func() {
-					defer close(docsChan)
-					docsChan <- documents
+					refsChan <- refs
 				}()
 			},
 		),
@@ -290,7 +288,7 @@ func (s *VectorStorage) ask(ctx context.Context, question string, opts ...chains
 	opts = append(opts, chains.WithMaxTokens(s.cfg.MaxTokens), chains.WithCallback(cb))
 
 	slog.DebugContext(ctx, "Running retrieval QA chain")
-	result, err := chains.Run(
+	answer, err := chains.Run(
 		ctx,
 		retrievalQAChain,
 		question,
@@ -304,13 +302,9 @@ func (s *VectorStorage) ask(ctx context.Context, question string, opts ...chains
 		return models.SearchResult{}, fmt.Errorf("%s: %w", op, err)
 	}
 
-	docs := <-docsChan
-	slog.DebugContext(ctx, "Retrieved documents",
-		"count", len(docs))
-
 	return models.SearchResult{
-		Answer:     result,
-		References: parseReferences(docs),
+		Answer:     answer,
+		References: refs,
 	}, nil
 }
 
@@ -336,20 +330,18 @@ func (s *VectorStorage) setupRetrievalQA(retriever vectorstores.Retriever) chain
 }
 
 func (s *VectorStorage) streamAnswer(chunkChan chan<- []byte) func(ctx context.Context, chunk []byte) error {
-	const op = "VectorStorage.streamAnswer"
 	return func(ctx context.Context, chunk []byte) error {
 		select {
 		case <-ctx.Done():
-			slog.WarnContext(ctx, "Stream context cancelled",
-				"op", op,
-				"error", ctx.Err())
 			return ctx.Err()
 		default:
-			slog.DebugContext(ctx, "Sending stream chunk",
-				"chunk_length", len(chunk))
-			chunkChan <- chunk
-			return nil
+			go func() {
+				slog.InfoContext(ctx, "Sending stream chunk",
+					"chunk_length", len(chunk))
+				chunkChan <- chunk
+			}()
 		}
+		return nil
 	}
 }
 

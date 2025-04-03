@@ -16,8 +16,8 @@ import (
 )
 
 type searchService interface {
-	GetAnswer(ctx context.Context, question string) (models.SearchResult, error)
-	GetAnswerStream(ctx context.Context, question string) (<-chan models.SearchResult, <-chan []byte, <-chan error)
+	GetAnswer(ctx context.Context, question string, refsChan chan<- []models.Reference) (models.SearchResult, error)
+	GetAnswerStream(ctx context.Context, question string) (<-chan models.SearchResult, <-chan []models.Reference, <-chan []byte, <-chan error)
 	SemanticSearch(ctx context.Context, query string) ([]models.Reference, error)
 }
 
@@ -36,10 +36,10 @@ func (c *Controller) RegisterRoutes(router *gin.RouterGroup) {
 	slog.Debug("Registering routes")
 	askGroup := router.Group("/ask", middleware.RequestLogger())
 	{
-		askGroup.POST("/", c.Ask())
+		askGroup.POST("/", middleware.SSEHeadersMiddleware(), c.Ask())
 		streamGroup := askGroup.Group("/stream")
 		{
-			streamGroup.POST("/", c.AskStream())
+			streamGroup.GET("/", middleware.SSEHeadersMiddleware(), c.AskStream())
 			streamGroup.DELETE("/cancel/:process_id", c.CancelProcess())
 		}
 	}
@@ -58,18 +58,6 @@ type AskResponse struct {
 	Result models.SearchResult `json:"result"`
 }
 
-// Ask
-// SearchController endpoints
-// @Summary Ask a question
-// @Description Get answer to a natural language question
-// @Tags search
-// @Accept json
-// @Produce json
-// @Param request body AskRequest true "Question"
-// @Success 200 {object} AskResponse
-// @Failure 400 {object} map[string]string
-// @Failure 500 {object} map[string]string
-// @Router /ask [post]
 func (c *Controller) Ask() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		slog.Info("Handling Ask request")
@@ -79,9 +67,25 @@ func (c *Controller) Ask() gin.HandlerFunc {
 			ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
+		processID, cancelCtx := c.createProcessContext(ctx)
+		ctx.Request = ctx.Request.WithContext(cancelCtx)
 
+		refsChan := make(chan []models.Reference, 1)
+		go func() {
+			defer close(refsChan)
+
+			ctx.Stream(func(w io.Writer) bool {
+				select {
+				case <-ctx.Done():
+					return false
+				case refs := <-refsChan:
+					return c.handleReferences(ctx, processID, refs)
+				}
+			})
+		}()
 		slog.Debug("Processing question", "question", req.Question)
-		answer, err := c.searchService.GetAnswer(ctx, req.Question)
+		answer, err := c.searchService.GetAnswer(ctx, req.Question, refsChan)
+
 		if err != nil {
 			slog.Error("Error getting answer", "error", err, "question", req.Question)
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -96,23 +100,43 @@ func (c *Controller) Ask() gin.HandlerFunc {
 func (c *Controller) AskStream() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		slog.Info("Initializing stream request")
-		req, ok := controllers.ValidateRequest[AskRequest](ctx)
-		if !ok {
-			slog.Warn("Invalid stream request")
+		question := ctx.Query("question")
+		if question == "" {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "question is required"})
 			return
 		}
+		slog.Info("Processing question", "question", question)
 
 		processID, cancelCtx := c.createProcessContext(ctx)
 		ctx.Request = ctx.Request.WithContext(cancelCtx)
-		controllers.SetSSEHeaders(ctx)
 
 		slog.Info("Starting stream processing",
 			"process_id", processID,
-			"question", req.Question,
+			"question", question,
 			"client", ctx.ClientIP())
 
-		results, chunks, errs := c.searchService.GetAnswerStream(ctx, req.Question)
-		c.handleStreamEvents(ctx, processID, cancelCtx, results, chunks, errs)
+		results, referencesChan, chunks, errs := c.searchService.GetAnswerStream(ctx, question)
+		wg := new(sync.WaitGroup)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ctx.Stream(func(w io.Writer) bool {
+				select {
+				case chunk := <-chunks:
+					return c.handleChunk(ctx, processID, chunk)
+				case references := <-referencesChan:
+					return c.handleReferences(ctx, processID, references)
+				case result := <-results:
+					return c.handleResult(ctx, processID, result)
+				case err := <-errs:
+					return c.handleError(ctx, processID, err)
+				case <-cancelCtx.Done():
+					return c.handleCancellationEvent(ctx, processID, cancelCtx.Err())
+				}
+			})
+		}()
+
+		wg.Wait()
 	}
 }
 
@@ -134,45 +158,20 @@ func (c *Controller) cleanupProcess(processID uuid.UUID) {
 	}
 }
 
-func (c *Controller) handleStreamEvents(
-	ctx *gin.Context,
-	processID uuid.UUID,
-	cancelCtx context.Context,
-	results <-chan models.SearchResult,
-	chunks <-chan []byte,
-	errs <-chan error,
-) {
-	ctx.Stream(func(w io.Writer) bool {
-		select {
-		case chunk := <-chunks:
-			slog.Debug("Processing chunk",
-				"process_id", processID,
-				"chunk_size", len(chunk))
-			return c.handleChunk(ctx, processID, chunk)
-
-		case result := <-results:
-			slog.Info("Finalizing stream processing",
-				"process_id", processID,
-				"result", result)
-			return c.handleResult(ctx, processID, result)
-
-		case err := <-errs:
-			slog.Error("Stream processing error",
-				"process_id", processID,
-				"error", err)
-			return c.handleError(ctx, processID, err)
-
-		case <-cancelCtx.Done():
-			slog.Warn("Stream processing cancelled",
-				"process_id", processID,
-				"reason", cancelCtx.Err())
-			c.sendCancellationEvent(ctx, processID)
-			return false
-		}
+func (c *Controller) handleReferences(ctx *gin.Context, processID uuid.UUID, references []models.Reference) bool {
+	slog.Debug("Processing reference",
+		"process_id", processID,
+		"references", references)
+	controllers.SendSSEEvent(ctx, "resources", gin.H{
+		"process_id": processID,
+		"references": references,
+		"complete":   false,
 	})
+	return true
 }
 
 func (c *Controller) handleChunk(ctx *gin.Context, processID uuid.UUID, chunk []byte) bool {
+	slog.Debug("Processing chunk", "process_id", processID, "chunk_size", len(chunk))
 	controllers.SendSSEEvent(ctx, "chunk", gin.H{
 		"process_id": processID.String(),
 		"content":    string(chunk),
@@ -182,37 +181,41 @@ func (c *Controller) handleChunk(ctx *gin.Context, processID uuid.UUID, chunk []
 }
 
 func (c *Controller) handleResult(ctx *gin.Context, processID uuid.UUID, result models.SearchResult) bool {
+	slog.Info("Finalizing stream processing", "process_id", processID, "result", result)
+
 	controllers.SendSSEEvent(ctx, "complete", gin.H{
 		"process_id": processID.String(),
 		"result":     result,
 		"complete":   true,
 	})
-	slog.Debug("Sent final result",
-		"process_id", processID,
-		"result", result)
+
+	slog.Debug("Sent final result", "process_id", processID, "result", result)
 	return false
 }
 
 func (c *Controller) handleError(ctx *gin.Context, processID uuid.UUID, err error) bool {
+	slog.Error("Stream processing error", "process_id", processID, "error", err)
+
 	controllers.SendSSEEvent(ctx, "error", gin.H{
 		"process_id": processID.String(),
 		"error":      err.Error(),
 	})
-	slog.Error("Stream error occurred",
-		"process_id", processID,
-		"error", err)
+	slog.Error("Stream error occurred", "process_id", processID, "error", err)
 	c.cleanupProcess(processID)
 	return false
 }
 
-func (c *Controller) sendCancellationEvent(ctx *gin.Context, processID uuid.UUID) {
+func (c *Controller) handleCancellationEvent(ctx *gin.Context, processID uuid.UUID, err error) bool {
+	slog.Warn("Stream processing cancelled", "process_id", processID, "reason", err)
+
 	controllers.SendSSEEvent(ctx, "cancelled", gin.H{
 		"process_id": processID.String(),
 		"message":    "Request cancelled by user",
 	})
-	slog.Info("Cancellation completed",
-		"process_id", processID,
-		"client", ctx.ClientIP())
+
+	slog.Info("Cancellation completed", "process_id", processID, "client", ctx.ClientIP())
+
+	return false
 }
 
 func (c *Controller) CancelProcess() gin.HandlerFunc {

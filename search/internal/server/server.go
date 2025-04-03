@@ -7,7 +7,6 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"go.uber.org/zap"
 )
 
 type Controller interface {
@@ -41,7 +40,7 @@ func NewServer(ctx context.Context, router *gin.Engine, cfg *Config, controllers
 		defer cancel()
 
 		if err := s.Shutdown(shutdownCtx); err != nil {
-			slog.Error("server shutdown error", zap.Error(err))
+			slog.Error("server shutdown error", "error", err)
 			panic(fmt.Errorf("server shutdown error: %w", err))
 		}
 	}()

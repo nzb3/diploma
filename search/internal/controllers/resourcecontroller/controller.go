@@ -38,7 +38,7 @@ func (c *Controller) RegisterRoutes(router *gin.RouterGroup) {
 	slog.Info("Registering resource routes")
 	resourceGroup := router.Group("/resources", middleware.RequestLogger())
 	{
-		resourceGroup.POST("/", c.SaveResource())
+		resourceGroup.POST("/", middleware.SSEHeadersMiddleware(), c.SaveResource())
 		resourceGroup.GET("/", c.GetResources())
 		resourceGroup.GET("/:id", c.GetResourceByID())
 		resourceGroup.DELETE("/:id", c.DeleteResource())
@@ -48,6 +48,7 @@ func (c *Controller) RegisterRoutes(router *gin.RouterGroup) {
 type SaveDocumentRequest struct {
 	Content []byte `json:"content" binding:"required"`
 	Type    string `json:"type" binding:"required"`
+	Name    string `json:"name"`
 }
 
 type SaveDocumentResponse struct {
@@ -66,7 +67,6 @@ func (c *Controller) SaveResource() gin.HandlerFunc {
 			return
 		}
 
-		controllers.SetSSEHeaders(ctx)
 		resourceChan, errChan := c.initProcessingChannels(ctx, req)
 		c.handleResourceStream(ctx, resourceChan, errChan)
 	}
@@ -158,6 +158,7 @@ func (c *Controller) initProcessingChannels(
 	resource := models.Resource{
 		RawContent: req.Content,
 		Type:       models.ResourceType(req.Type),
+		Name:       req.Name,
 	}
 
 	slog.Debug("Starting resource processing",
