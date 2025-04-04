@@ -1,0 +1,155 @@
+import { useState, useEffect } from 'react';
+import { getResources, saveResource, deleteResource, getResource } from '../services/api';
+import { Resource, ResourceEvent, SaveDocumentRequest } from '../types/api';
+import { 
+  ResourceList, 
+  ResourceModal, 
+  ResourceUploadForm 
+} from '../components/resources';
+
+export default function ResourcesPage() {
+  // Resource state
+  const [resources, setResources] = useState<Resource[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  
+  // Upload errors tracking
+  const [uploadErrors, setUploadErrors] = useState<Record<string, string>>({});
+  
+  // Modal state
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedResource, setSelectedResource] = useState<Resource | null>(null);
+  const [isLoadingResource, setIsLoadingResource] = useState(false);
+
+  // Load resources on component mount
+  useEffect(() => {
+    loadResources();
+  }, []);
+
+  // Load resources from the API
+  const loadResources = async () => {
+    if (isLoading) return;
+    
+    setIsLoading(true);
+    try {
+      const data = await getResources();
+      setResources(data);
+    } catch (error) {
+      console.error('Failed to load resources:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Handle resource upload submission
+  const handleUploadSubmit = async (data: SaveDocumentRequest) => {
+    console.log("Uploading resource with data:", data);
+    setIsUploading(true);
+    setUploadErrors({});
+
+    try {
+      const eventSource = await saveResource(data);
+
+      eventSource.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        
+        if (data.status_update) {
+          const update = data.status_update as ResourceEvent;
+
+          // Update the resource status instead of progress
+          setResources(prevResources => {
+            return prevResources.map(resource => {
+              if (resource.id === update.id) {
+                return { ...resource, status: update.status };
+              }
+              return resource;
+            });
+          });
+
+          if (update.error) {
+            setUploadErrors(prev => ({
+              ...prev,
+              [update.id]: update.error || 'Unknown error',
+            }));
+            loadResources();
+          }
+        } else if (data.completed) {
+          setIsUploading(false);
+          loadResources();
+        }
+      };
+
+      eventSource.onerror = () => {
+        setIsUploading(false);
+        loadResources();
+      };
+    } catch (error) {
+      setIsUploading(false);
+      console.error('Failed to upload resource:', error);
+    }
+  };
+
+  // Handle resource deletion
+  const handleDeleteResource = async (id: string) => {
+    try {
+      await deleteResource(id);
+      setResources(resources.filter(r => r.id !== id));
+    } catch (error) {
+      console.error('Failed to delete resource:', error);
+    }
+  };
+
+  // Handle resource click to open modal
+  const handleResourceClick = async (resource: Resource) => {
+    console.log('Resource clicked:', resource);
+    setSelectedResource(resource);
+    setIsModalOpen(true);
+    console.log('Modal state set to open');
+    
+    // If we don't have the full resource content, fetch it
+    if (!resource.extracted_content && !resource.raw_content) {
+      setIsLoadingResource(true);
+      try {
+        console.log('Fetching resource details...');
+        const fullResource = await getResource(resource.id);
+        console.log('Resource details fetched:', fullResource);
+        setSelectedResource(fullResource);
+      } catch (error) {
+        console.error('Failed to load resource details:', error);
+      } finally {
+        setIsLoadingResource(false);
+      }
+    }
+  };
+
+  // Handle modal close
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setSelectedResource(null);
+  };
+
+  return (
+    <div className="space-y-6">
+      <ResourceUploadForm 
+        onUpload={handleUploadSubmit}
+        isUploading={isUploading}
+      />
+      
+      <ResourceList 
+        resources={resources}
+        isLoading={isLoading}
+        uploadErrors={uploadErrors}
+        onResourceClick={handleResourceClick}
+        onDeleteResource={handleDeleteResource}
+        onRefreshResources={loadResources}
+      />
+      
+      <ResourceModal 
+        isOpen={isModalOpen}
+        resource={selectedResource}
+        isLoading={isLoadingResource}
+        onClose={handleCloseModal}
+      />
+    </div>
+  );
+} 

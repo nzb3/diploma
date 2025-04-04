@@ -1,43 +1,13 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document Search and QA System</title>
-    <link rel="stylesheet" href="index.css">
-    <script src="index.js" defer></script>
-</head>
-<body>
-<header>
-    <h1>Document Search and QA System</h1>
-</header>
-
-<div class="answer-area" id="answerArea">
-    <!-- Messages will appear here -->
-</div>
-
-<div class="search-area">
-    <input type="text" id="searchInput" placeholder="Enter your search query or question...">
-    <button id="searchBtn">Search</button>
-    <button id="askBtn">Ask</button>
-</div>
-
-<div class="upload-area url-upload">
-    <h3>Upload Website</h3>
-    <input type="url" id="urlInput" placeholder="Enter website URL (e.g., https://example.com)">
-    <button id="urlUploadBtn">Upload</button>
-</div>
-
-<div class="upload-area pdf-upload">
-    <h3>Upload PDF Document</h3>
-    <input type="file" id="pdfInput" accept=".pdf">
-    <button id="pdfUploadBtn">Upload</button>
-</div>
-
-<div class="upload-area text-upload">
-    <h3>Upload Text</h3>
-    <textarea id="textInput" placeholder="Enter your text here..."></textarea>
-    <button id="textUploadBtn">Upload</button>
-</div>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vite + React + TS</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
 </html>
