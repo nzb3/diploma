@@ -10,10 +10,6 @@ import (
 	"github.com/nzb3/diploma/search/internal/domain/models"
 )
 
-type vectorStorage interface {
-	PutResource(ctx context.Context, resource models.Resource) ([]string, error)
-}
-
 type resourceRepository interface {
 	GetResources(ctx context.Context) ([]models.Resource, error)
 	GetResourceByID(ctx context.Context, resourceID uuid.UUID) (*models.Resource, error)
@@ -22,18 +18,21 @@ type resourceRepository interface {
 	DeleteResource(ctx context.Context, id uuid.UUID) error
 }
 
-type Service struct {
-	vectorStorage vectorStorage
-	resourceRepo  resourceRepository
+type resourceProcessor interface {
+	ProcessResource(ctx context.Context, resource models.Resource) (models.Resource, error)
 }
 
-func NewService(vs vectorStorage, rr resourceRepository) *Service {
+type Service struct {
+	resourceRepo      resourceRepository
+	resourceProcessor resourceProcessor
+}
+
+func NewService(rr resourceRepository, rp resourceProcessor) *Service {
 	slog.Debug("Initializing resource service",
-		"vector_storage_type", fmt.Sprintf("%T", vs),
 		"repository_type", fmt.Sprintf("%T", rr))
 	return &Service{
-		vectorStorage: vs,
-		resourceRepo:  rr,
+		resourceRepo:      rr,
+		resourceProcessor: rp,
 	}
 }
 
@@ -125,7 +124,7 @@ func (s *Service) SaveResource(ctx context.Context, resource models.Resource) (<
 		slog.DebugContext(ctx, "Initial resource state saved",
 			"resource_id", savedResource.ID)
 
-		processedResource, err := s.processResource(ctx, *savedResource)
+		processedResource, err := s.resourceProcessor.ProcessResource(ctx, *savedResource)
 		if err != nil {
 			slog.ErrorContext(ctx, "Resource processing failed",
 				"op", op,
@@ -135,10 +134,25 @@ func (s *Service) SaveResource(ctx context.Context, resource models.Resource) (<
 			return
 		}
 
-		resourceChan <- *processedResource
+		slog.DebugContext(ctx, "Updating resource status", "resource_id", resource.ID)
+		updatedResource, err := s.resourceRepo.UpdateResource(ctx, processedResource)
+		if err != nil {
+			slog.ErrorContext(ctx, "Resource update failed",
+				"op", op,
+				"resource_id", resource.ID,
+				"error", err)
+			errChan <- err
+			return
+		}
+
+		slog.DebugContext(ctx, "Resource status updated",
+			"resource_id", updatedResource.ID,
+			"new_status", updatedResource.Status)
+
+		resourceChan <- *updatedResource
 		slog.InfoContext(ctx, "Resource processing completed",
-			"resource_id", processedResource.ID,
-			"status", processedResource.Status)
+			"resource_id", updatedResource.ID,
+			"status", updatedResource.Status)
 	}()
 
 	return resourceChan, errChan
@@ -167,50 +181,4 @@ func (s *Service) saveResource(ctx context.Context, resource models.Resource) (*
 	slog.DebugContext(ctx, "Resource saved successfully",
 		"resource_id", savedResource.ID)
 	return savedResource, nil
-}
-
-func (s *Service) processResource(ctx context.Context, resource models.Resource) (*models.Resource, error) {
-	const op = "Service.processResource"
-	slog.DebugContext(ctx, "Processing resource content",
-		"resource_id", resource.ID,
-		"type", resource.Type)
-
-	slog.DebugContext(ctx, "Extracting text content",
-		"resource_id", resource.ID,
-		"content_length", len(resource.RawContent))
-
-	// TODO: process with separate package processor
-	resource.ExtractedContent = string(resource.RawContent)
-
-	chunkIDs, err := s.vectorStorage.PutResource(ctx, resource)
-	if err != nil {
-		slog.ErrorContext(ctx, "Vector storage operation failed",
-			"op", op,
-			"resource_id", resource.ID,
-			"error", err)
-		return nil, err
-	}
-
-	slog.InfoContext(ctx, "Resource vectorization completed",
-		"resource_id", resource.ID,
-		"chunks_count", len(chunkIDs))
-
-	resource.ChunkIDs = chunkIDs
-	resource.SetStatusProcessed()
-
-	slog.DebugContext(ctx, "Updating resource status",
-		"resource_id", resource.ID)
-	updatedResource, err := s.resourceRepo.UpdateResource(ctx, resource)
-	if err != nil {
-		slog.ErrorContext(ctx, "Resource update failed",
-			"op", op,
-			"resource_id", resource.ID,
-			"error", err)
-		return nil, err
-	}
-
-	slog.DebugContext(ctx, "Resource status updated",
-		"resource_id", updatedResource.ID,
-		"new_status", updatedResource.Status)
-	return updatedResource, nil
 }

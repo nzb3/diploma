@@ -108,7 +108,6 @@ func (c *Controller) AskStream() gin.HandlerFunc {
 		slog.Info("Processing question", "question", question)
 
 		processID, cancelCtx := c.createProcessContext(ctx)
-		ctx.Request = ctx.Request.WithContext(cancelCtx)
 
 		slog.Info("Starting stream processing",
 			"process_id", processID,
@@ -116,27 +115,21 @@ func (c *Controller) AskStream() gin.HandlerFunc {
 			"client", ctx.ClientIP())
 
 		results, referencesChan, chunks, errs := c.searchService.GetAnswerStream(ctx, question)
-		wg := new(sync.WaitGroup)
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			ctx.Stream(func(w io.Writer) bool {
-				select {
-				case chunk := <-chunks:
-					return c.handleChunk(ctx, processID, chunk)
-				case references := <-referencesChan:
-					return c.handleReferences(ctx, processID, references)
-				case result := <-results:
-					return c.handleResult(ctx, processID, result)
-				case err := <-errs:
-					return c.handleError(ctx, processID, err)
-				case <-cancelCtx.Done():
-					return c.handleCancellationEvent(ctx, processID, cancelCtx.Err())
-				}
-			})
-		}()
 
-		wg.Wait()
+		ctx.Stream(func(w io.Writer) bool {
+			select {
+			case chunk := <-chunks:
+				return c.handleChunk(ctx, processID, chunk)
+			case references := <-referencesChan:
+				return c.handleReferences(ctx, processID, references)
+			case result := <-results:
+				return c.handleResult(ctx, processID, result)
+			case err := <-errs:
+				return c.handleError(ctx, processID, err)
+			case <-cancelCtx.Done():
+				return c.handleCancellationEvent(ctx, processID, cancelCtx.Err())
+			}
+		})
 	}
 }
 
@@ -144,6 +137,8 @@ func (c *Controller) createProcessContext(ctx *gin.Context) (uuid.UUID, context.
 	processID := uuid.New()
 	cancelCtx, cancel := context.WithCancel(ctx.Request.Context())
 	c.activeRequests.Store(processID, cancel)
+
+	ctx.Request = ctx.Request.WithContext(cancelCtx)
 
 	slog.Debug("Created new process context",
 		"process_id", processID,

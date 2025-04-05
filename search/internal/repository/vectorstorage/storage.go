@@ -1,12 +1,10 @@
 package vectorstorage
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"strings"
 
 	"github.com/samber/lo"
@@ -43,6 +41,8 @@ func NewVectorStorage(ctx context.Context, cfg *Config, embedder embeddings.Embe
 		ctx,
 		pgvector.WithCollectionTableName("collections"),
 		pgvector.WithEmbeddingTableName("embeddings"),
+		pgvector.WithPreDeleteCollection(true),
+		pgvector.WithVectorDimensions(cfg.EmbeddingDimensions),
 		pgvector.WithEmbedder(embedder),
 		pgvector.WithConnectionURL("postgres://postgres:postgres@postgres:5432/postgres?sslmode=disable"),
 	)
@@ -69,31 +69,11 @@ func (s *VectorStorage) PutResource(ctx context.Context, resource models.Resourc
 	const op = "VectorStorage.PutResource"
 	slog.DebugContext(ctx, "Processing resource",
 		"resource_type", resource.Type,
-		"source", resource.Source,
 		"content_length", len(resource.ExtractedContent))
 
-	var chunkIDs []string
-	var err error
-
-	switch resource.Type {
-	case models.ResourceTypeURL:
-		slog.DebugContext(ctx, "Handling URL resource",
-			"url", resource.Source)
-		chunkIDs, err = s.PutURL(ctx, resource.Source)
-	case models.ResourceTypePDF:
-		slog.DebugContext(ctx, "Handling PDF resource",
-			"content_size", len(resource.RawContent))
-		chunkIDs, err = s.PutPDFFile(ctx, resource.RawContent)
-	case models.ResourceTypeText:
-		slog.DebugContext(ctx, "Handling text resource",
-			"content_length", len(resource.ExtractedContent))
-		chunkIDs, err = s.PutText(ctx, resource.ExtractedContent)
-	default:
-		slog.ErrorContext(ctx, "Unsupported resource type",
-			"op", op,
-			"type", resource.Type)
-		return nil, fmt.Errorf("%s:%w %s", op, UnsupportedResourceTypeError, resource.Type)
-	}
+	slog.DebugContext(ctx, "Handling resource",
+		"content_length", len(resource.ExtractedContent))
+	chunkIDs, err := s.PutText(ctx, resource.ExtractedContent)
 
 	if err != nil {
 		slog.ErrorContext(ctx, "Failed to process resource",
@@ -107,64 +87,6 @@ func (s *VectorStorage) PutResource(ctx context.Context, resource models.Resourc
 		"chunks_count", len(chunkIDs),
 		"resource_type", resource.Type)
 	return chunkIDs, nil
-}
-
-func (s *VectorStorage) PutURL(ctx context.Context, source string) ([]string, error) {
-	const op = "VectorStorage.PutURL"
-	slog.DebugContext(ctx, "Fetching URL content",
-		"url", source)
-
-	resp, err := http.Get(source)
-	if err != nil {
-		slog.ErrorContext(ctx, "Failed to fetch URL",
-			"op", op,
-			"url", source,
-			"error", err)
-		return nil, fmt.Errorf("%s: %w", op, err)
-	}
-	defer resp.Body.Close()
-
-	slog.DebugContext(ctx, "Loading HTML documents",
-		"url", source)
-	docs, err := documentloaders.NewHTML(resp.Body).
-		LoadAndSplit(
-			ctx,
-			textsplitter.NewTokenSplitter(),
-		)
-	if err != nil {
-		slog.ErrorContext(ctx, "Failed to process HTML",
-			"op", op,
-			"error", err)
-		return nil, fmt.Errorf("%s: %w", op, err)
-	}
-
-	slog.DebugContext(ctx, "Adding HTML documents to vector store",
-		"documents_count", len(docs))
-	return s.addDocuments(ctx, docs)
-}
-
-func (s *VectorStorage) PutPDFFile(ctx context.Context, document []byte) ([]string, error) {
-	const op = "VectorStorage.PutPDFFile"
-	slog.DebugContext(ctx, "Processing PDF document",
-		"file_size", len(document))
-
-	docs, err := documentloaders.NewPDF(
-		bytes.NewReader(document),
-		int64(len(document)),
-	).LoadAndSplit(
-		ctx,
-		textsplitter.NewTokenSplitter(),
-	)
-	if err != nil {
-		slog.ErrorContext(ctx, "Failed to process PDF",
-			"op", op,
-			"error", err)
-		return nil, fmt.Errorf("%s: %w", op, err)
-	}
-
-	slog.DebugContext(ctx, "Adding PDF documents to vector store",
-		"documents_count", len(docs))
-	return s.addDocuments(ctx, docs)
 }
 
 func (s *VectorStorage) PutText(ctx context.Context, text string) ([]string, error) {
@@ -249,10 +171,23 @@ func (s *VectorStorage) GetAnswer(ctx context.Context, question string, refsChan
 
 func (s *VectorStorage) GetAnswerStream(ctx context.Context, question string, refsChan chan<- []models.Reference, chunkChan chan<- []byte) (models.SearchResult, error) {
 	const op = "VectorStorage.GetAnswerStream"
-	slog.DebugContext(ctx, "Starting answer streaming",
-		"question", question)
+	slog.DebugContext(ctx, "Starting answer streaming", "question", question)
 
-	result, err := s.ask(ctx, question, refsChan, chains.WithStreamingFunc(s.streamAnswer(chunkChan)))
+	result, err := s.ask(ctx, question, refsChan,
+		chains.WithStreamingFunc(
+			func(ctx context.Context, chunk []byte) error {
+				slog.Info("Received chunk", "chunk", string(chunk), "length", len(chunk))
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				default:
+					chunkChan <- chunk
+					return nil
+				}
+			},
+		),
+	)
+
 	if err != nil {
 		slog.ErrorContext(ctx, "Streaming failed",
 			"op", op,
@@ -261,8 +196,7 @@ func (s *VectorStorage) GetAnswerStream(ctx context.Context, question string, re
 		return models.SearchResult{}, fmt.Errorf("%s: %w", op, err)
 	}
 
-	slog.InfoContext(ctx, "Answer stream completed",
-		"chunks_sent", len(result.Answer))
+	slog.InfoContext(ctx, "Answer stream completed", "chunks_sent", len(result.Answer))
 	return result, err
 }
 
@@ -276,9 +210,7 @@ func (s *VectorStorage) ask(ctx context.Context, question string, refsChan chan<
 			func(ctx context.Context, query string, documents []schema.Document) {
 				slog.Info("On retrieving was received documents", "documents_count", len(documents))
 				refs = parseReferences(documents)
-				go func() {
-					refsChan <- refs
-				}()
+				refsChan <- refs
 			},
 		),
 	)
@@ -287,25 +219,44 @@ func (s *VectorStorage) ask(ctx context.Context, question string, refsChan chan<
 	retrievalQAChain := s.setupRetrievalQA(retriever)
 	opts = append(opts, chains.WithMaxTokens(s.cfg.MaxTokens), chains.WithCallback(cb))
 
-	slog.DebugContext(ctx, "Running retrieval QA chain")
-	answer, err := chains.Run(
-		ctx,
-		retrievalQAChain,
-		question,
-		opts...,
-	)
+	answerChan := make(chan string)
+	errChan := make(chan error)
 
-	if err != nil {
-		slog.ErrorContext(ctx, "Chain execution failed",
-			"op", op,
-			"error", err)
+	go func() {
+		defer func() {
+			close(answerChan)
+			close(errChan)
+		}()
+		select {
+		case <-ctx.Done():
+			errChan <- ctx.Err()
+		default:
+			slog.DebugContext(ctx, "Running retrieval QA chain")
+			answer, err := chains.Run(
+				ctx,
+				retrievalQAChain,
+				question,
+				opts...,
+			)
+			if err != nil {
+				errChan <- err
+			}
+
+			answerChan <- answer
+		}
+	}()
+
+	select {
+	case <-ctx.Done():
+		return models.SearchResult{}, ctx.Err()
+	case err := <-errChan:
 		return models.SearchResult{}, fmt.Errorf("%s: %w", op, err)
+	case answer := <-answerChan:
+		return models.SearchResult{
+			Answer:     answer,
+			References: refs,
+		}, nil
 	}
-
-	return models.SearchResult{
-		Answer:     answer,
-		References: refs,
-	}, nil
 }
 
 func (s *VectorStorage) setupRetriever(callbackHandler ...*callback.Handler) vectorstores.Retriever {
@@ -327,22 +278,6 @@ func (s *VectorStorage) setupRetrievalQA(retriever vectorstores.Retriever) chain
 		s.generator,
 		retriever,
 	)
-}
-
-func (s *VectorStorage) streamAnswer(chunkChan chan<- []byte) func(ctx context.Context, chunk []byte) error {
-	return func(ctx context.Context, chunk []byte) error {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-			go func() {
-				slog.InfoContext(ctx, "Sending stream chunk",
-					"chunk_length", len(chunk))
-				chunkChan <- chunk
-			}()
-		}
-		return nil
-	}
 }
 
 func parseReferences(docs []schema.Document) []models.Reference {

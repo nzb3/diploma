@@ -20,12 +20,6 @@ const (
 
 type ResourceType string
 
-const (
-	ResourceTypeURL  ResourceType = "url"
-	ResourceTypePDF  ResourceType = "pdf"
-	ResourceTypeText ResourceType = "text"
-)
-
 type ResourceEvent struct {
 	ID     uuid.UUID      `json:"id"`
 	Status ResourceStatus `json:"status"`
@@ -35,7 +29,7 @@ type Resource struct {
 	ID               uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
 	Name             string         `gorm:"type:varchar(255)" json:"name"`
 	Type             ResourceType   `gorm:"type:varchar(100)" json:"type"`
-	Source           string         `gorm:"type:varchar(255)" json:"source"`
+	URL              string         `gorm:"type:varchar(255)" json:"url,omitempty"`
 	ExtractedContent string         `gorm:"type:text" json:"extracted_content"`
 	RawContent       []byte         `gorm:"type:bytea" json:"raw_content"`
 	ChunkIDs         []string       `gorm:"-" json:"chunk_ids,omitempty"`

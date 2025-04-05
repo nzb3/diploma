@@ -49,6 +49,7 @@ type SaveDocumentRequest struct {
 	Content []byte `json:"content" binding:"required"`
 	Type    string `json:"type" binding:"required"`
 	Name    string `json:"name"`
+	URL     string `json:"url"`
 }
 
 type SaveDocumentResponse struct {
@@ -159,6 +160,7 @@ func (c *Controller) initProcessingChannels(
 		RawContent: req.Content,
 		Type:       models.ResourceType(req.Type),
 		Name:       req.Name,
+		URL:        req.URL,
 	}
 
 	slog.Debug("Starting resource processing",
@@ -199,9 +201,7 @@ func (c *Controller) handleResourceUpdate(
 		return false
 	}
 
-	slog.Info("Sending status update",
-		"resource_id", res.ID,
-		"status", res.Status)
+	slog.Info("Sending status update", "resource_id", res.ID, "status", res.Status)
 
 	controllers.SendSSEEvent(ctx, "status_update", gin.H{
 		"id":     res.ID,
@@ -228,9 +228,8 @@ func (c *Controller) handleResourceError(
 	ok bool,
 ) bool {
 	if ok {
-		slog.Error("Resource processing error",
-			"error", err,
-			"resource_type", ctx.Request.Context().Value("type"))
+		slog.Error("Resource processing error", "error", err, "resource_type", ctx.Request.Context().Value("type"))
+
 		controllers.SendSSEEvent(ctx, "error", gin.H{
 			"error": err.Error(),
 		})

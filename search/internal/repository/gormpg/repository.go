@@ -44,6 +44,8 @@ func (r *Repository) migrate() error {
 	m := []interface{}{
 		&models.Resource{},
 		&models.ResourceEmbedding{},
+		&models.Collection{},
+		&models.Embedding{},
 	}
 
 	if err := r.db.AutoMigrate(m...); err != nil {
@@ -77,6 +79,12 @@ func (r *Repository) migrate() error {
             CREATE INDEX IF NOT EXISTS idx_resources_type 
             ON resources USING HASH (type)
         `).Error; err != nil {
+			return err
+		}
+
+		if err := tx.Exec(`
+			ALTER TABLE collections ADD CONSTRAINT uni_collections_name UNIQUE (name);
+		`).Error; err != nil {
 			return err
 		}
 

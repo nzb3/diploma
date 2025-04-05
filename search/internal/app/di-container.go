@@ -21,6 +21,7 @@ import (
 	"github.com/nzb3/diploma/search/internal/domain/services/resourceservcie"
 	"github.com/nzb3/diploma/search/internal/domain/services/searchservice"
 	"github.com/nzb3/diploma/search/internal/integration/generator"
+	"github.com/nzb3/diploma/search/internal/integration/resourceprocessor"
 	"github.com/nzb3/diploma/search/internal/repository/gormpg"
 	"github.com/nzb3/diploma/search/internal/repository/vectorstorage"
 	"github.com/nzb3/diploma/search/internal/server"
@@ -46,6 +47,7 @@ type serviceProvider struct {
 	gormDB              *gorm.DB
 	searchController    *searchcontroller.Controller
 	searchService       *searchservice.Service
+	resourceProcessor   *resourceprocessor.ResourceProcessor
 }
 
 func NewServiceProvider() *serviceProvider {
@@ -238,12 +240,24 @@ func (sp *serviceProvider) Repository(ctx context.Context) *gormpg.Repository {
 	return repository
 }
 
+func (sp *serviceProvider) ResourceProcessor(ctx context.Context) *resourceprocessor.ResourceProcessor {
+	if sp.resourceProcessor != nil {
+		return sp.resourceProcessor
+	}
+
+	resourceProcessor := resourceprocessor.NewResourceProcessor(sp.VectorStore(ctx))
+
+	sp.resourceProcessor = resourceProcessor
+
+	return resourceProcessor
+}
+
 func (sp *serviceProvider) ResourceService(ctx context.Context) *resourceservcie.Service {
 	if sp.resourceService != nil {
 		return sp.resourceService
 	}
 
-	service := resourceservcie.NewService(sp.VectorStore(ctx), sp.Repository(ctx))
+	service := resourceservcie.NewService(sp.Repository(ctx), sp.ResourceProcessor(ctx))
 
 	sp.resourceService = service
 
