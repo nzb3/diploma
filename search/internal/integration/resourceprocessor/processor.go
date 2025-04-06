@@ -40,12 +40,10 @@ func (p *ResourceProcessor) ProcessResource(ctx context.Context, resource models
 		"resource_id", resource.ID,
 		"content_length", len(resource.RawContent))
 
-	extractedContent, err := p.extractContent(ctx, resource)
+	resource, err := p.extractContent(ctx, resource)
 	if err != nil {
 		return models.Resource{}, fmt.Errorf("%s: %w", op, err)
 	}
-
-	resource.ExtractedContent = extractedContent
 
 	chunkIDs, err := p.vectorStorage.PutResource(ctx, resource)
 	if err != nil {
@@ -65,39 +63,40 @@ func (p *ResourceProcessor) ProcessResource(ctx context.Context, resource models
 	return resource, nil
 }
 
-func (p *ResourceProcessor) extractContent(ctx context.Context, resource models.Resource) (string, error) {
+func (p *ResourceProcessor) extractContent(ctx context.Context, resource models.Resource) (models.Resource, error) {
 	const op = "ResourceProcessor.extractContent"
 	switch resource.Type {
 	case "text", "md":
-		return p.extractText(ctx, resource.RawContent)
+		return p.extractText(ctx, resource)
 	case "url":
-		return p.extractContentURL(ctx, resource.URL)
+		return p.extractContentURL(ctx, resource)
 	case "pdf":
-		return p.extractContentPDF(ctx, resource.RawContent)
+		return p.extractContentPDF(ctx, resource)
 	default:
-		return "", fmt.Errorf("unknown resource type: %s", resource.Type)
+		return models.Resource{}, fmt.Errorf("unknown resource type: %s", resource.Type)
 	}
 }
 
-func (p *ResourceProcessor) extractText(ctx context.Context, rawContent []byte) (string, error) {
+func (p *ResourceProcessor) extractText(ctx context.Context, resource models.Resource) (models.Resource, error) {
 	const op = "ResourceProcessor.extractText"
-	return string(rawContent), nil
+	resource.ExtractedContent = string(resource.RawContent)
+	return resource, nil
 }
 
-func (p *ResourceProcessor) extractContentURL(ctx context.Context, url string) (string, error) {
+func (p *ResourceProcessor) extractContentURL(ctx context.Context, resource models.Resource) (models.Resource, error) {
 	defer func() {
 		if r := recover(); r != nil {
 			slog.ErrorContext(ctx, "Error extracting content URL", r)
 		}
 	}()
 	const op = "ResourceProcessor.extractContentURL"
-	slog.Info("Extract content from URL", "url", url)
+	slog.Info("Extract content from URL", "url", resource.URL)
+	url := resource.URL
 	body, isPDF, err := p.loadBodyFromURL(ctx, url)
-	defer body.Close()
-
 	if err != nil {
-		return "", fmt.Errorf("%s: %w", op, err)
+		return models.Resource{}, fmt.Errorf("%s: %w", op, err)
 	}
+	defer body.Close()
 
 	if isPDF {
 		bodyContent, err := io.ReadAll(body)
@@ -106,18 +105,20 @@ func (p *ResourceProcessor) extractContentURL(ctx context.Context, url string) (
 				"op", op,
 				"url", url,
 				"error", err)
-			return "", fmt.Errorf("%s: failed to read PDF content: %w", op, err)
+			return models.Resource{}, fmt.Errorf("%s: failed to read PDF content: %w", op, err)
 		}
 
-		content, err := p.extractContentPDF(ctx, bodyContent)
+		resource.RawContent = bodyContent
+
+		resource, err = p.extractContentPDF(ctx, resource)
 		if err != nil {
 			slog.ErrorContext(ctx, "Failed to extract PDF content",
 				"op", op,
 				"url", url,
 				"error", err)
-			return "", fmt.Errorf("%s: failed to extract PDF content: %w", op, err)
+			return models.Resource{}, fmt.Errorf("%s: failed to extract PDF content: %w", op, err)
 		}
-		return content, nil
+		return resource, nil
 	}
 
 	markdown, err := md.ConvertReader(body)
@@ -126,10 +127,10 @@ func (p *ResourceProcessor) extractContentURL(ctx context.Context, url string) (
 			"op", op,
 			"url", url,
 			"error", err)
-		return "", fmt.Errorf("%s: %w", op, err)
+		return models.Resource{}, fmt.Errorf("%s: %w", op, err)
 	}
-
-	return string(markdown), nil
+	resource.ExtractedContent = string(markdown)
+	return resource, nil
 }
 
 func (p *ResourceProcessor) loadBodyFromURL(ctx context.Context, url string) (io.ReadCloser, bool, error) {
@@ -158,13 +159,14 @@ func (p *ResourceProcessor) loadBodyFromURL(ctx context.Context, url string) (io
 	return resp.Body, isPDF, nil
 }
 
-func (p *ResourceProcessor) extractContentPDF(ctx context.Context, rawContent []byte) (string, error) {
+func (p *ResourceProcessor) extractContentPDF(ctx context.Context, resource models.Resource) (models.Resource, error) {
 	const op = "ResourceProcessor.extractContentPDF"
-	markdown, err := p.pdfToMD(ctx, rawContent)
+	markdown, err := p.pdfToMD(ctx, resource.RawContent)
 	if err != nil {
-		return "", fmt.Errorf("%s: %w", op, err)
+		return models.Resource{}, fmt.Errorf("%s: %w", op, err)
 	}
-	return markdown, nil
+	resource.ExtractedContent = markdown
+	return resource, nil
 }
 
 func (p *ResourceProcessor) pdfToMD(ctx context.Context, rawContent []byte) (string, error) {
