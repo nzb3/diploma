@@ -165,7 +165,7 @@ func (sp *serviceProvider) VectorStorageConfig(ctx context.Context) *vectorstora
 		return sp.vectorStorageConfig
 	}
 
-	config, err := vectorstorage.NewConfig()
+	config, err := vectorstorage.NewConfig(sp.RepositoryConfig(ctx).DSN)
 	if err != nil {
 		sp.Logger(ctx).Logger().Error("error creating vector storage config", err)
 		panic(fmt.Errorf("error creating vector storage config: %w", err))

@@ -1,0 +1,12 @@
+version: '3'
+
+
+tasks:
+  run-debug:
+    cmds:
+      - docker compose -f docker-compose.yml -f docker-compose.debug.yml up --build -d
+    silent: true
+  run-prod:
+    cmds:
+      - docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d
+    silent: true

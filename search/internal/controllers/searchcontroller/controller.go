@@ -2,6 +2,7 @@ package searchcontroller
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -36,10 +37,10 @@ func (c *Controller) RegisterRoutes(router *gin.RouterGroup) {
 	slog.Debug("Registering routes")
 	askGroup := router.Group("/ask", middleware.RequestLogger())
 	{
-		askGroup.POST("/", middleware.SSEHeadersMiddleware(), c.Ask())
+		askGroup.POST("/", middleware.SSEHeadersMiddleware(), c.createProcessMiddleware(), c.Ask())
 		streamGroup := askGroup.Group("/stream")
 		{
-			streamGroup.GET("/", middleware.SSEHeadersMiddleware(), c.AskStream())
+			streamGroup.GET("/", middleware.SSEHeadersMiddleware(), c.createProcessMiddleware(), c.AskStream())
 			streamGroup.DELETE("/cancel/:process_id", c.CancelProcess())
 		}
 	}
@@ -67,8 +68,12 @@ func (c *Controller) Ask() gin.HandlerFunc {
 			ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		processID, cancelCtx := c.createProcessContext(ctx)
-		ctx.Request = ctx.Request.WithContext(cancelCtx)
+		processID, err := getProcessIDFromContext(ctx)
+		if err != nil {
+			slog.Error("Error getting process ID check createProcessMiddleware", "error", err)
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "failed to start process"})
+			return
+		}
 
 		refsChan := make(chan []models.Reference, 1)
 		go func() {
@@ -107,43 +112,71 @@ func (c *Controller) AskStream() gin.HandlerFunc {
 		}
 		slog.Info("Processing question", "question", question)
 
-		processID, cancelCtx := c.createProcessContext(ctx)
+		processID, err := getProcessIDFromContext(ctx)
+		if err != nil {
+			slog.Error("Error getting process ID check createProcessMiddleware", "error", err)
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "failed to start process"})
+			return
+		}
 
 		slog.Info("Starting stream processing",
 			"process_id", processID,
 			"question", question,
 			"client", ctx.ClientIP())
 
-		results, referencesChan, chunks, errs := c.searchService.GetAnswerStream(ctx, question)
+		resultChan, referencesChan, chunkChan, errChan := c.searchService.GetAnswerStream(ctx, question)
 
 		ctx.Stream(func(w io.Writer) bool {
 			select {
-			case chunk := <-chunks:
+			case chunk := <-chunkChan:
 				return c.handleChunk(ctx, processID, chunk)
 			case references := <-referencesChan:
 				return c.handleReferences(ctx, processID, references)
-			case result := <-results:
+			case result := <-resultChan:
 				return c.handleResult(ctx, processID, result)
-			case err := <-errs:
+			case err := <-errChan:
 				return c.handleError(ctx, processID, err)
-			case <-cancelCtx.Done():
-				return c.handleCancellationEvent(ctx, processID, cancelCtx.Err())
+			case <-ctx.Done():
+				return c.handleCancellationEvent(ctx, processID, ctx.Err())
 			}
 		})
 	}
 }
 
-func (c *Controller) createProcessContext(ctx *gin.Context) (uuid.UUID, context.Context) {
-	processID := uuid.New()
-	cancelCtx, cancel := context.WithCancel(ctx.Request.Context())
-	c.activeRequests.Store(processID, cancel)
+func getProcessIDFromContext(ctx *gin.Context) (uuid.UUID, error) {
+	value, ok := ctx.Get("process_id")
+	if !ok {
+		return uuid.Nil, errors.New("process_id not found in context")
+	}
 
-	ctx.Request = ctx.Request.WithContext(cancelCtx)
+	processID, ok := value.(uuid.UUID)
+	if !ok {
+		return uuid.Nil, errors.New("process_id not found in context")
+	}
 
-	slog.Debug("Created new process context",
-		"process_id", processID,
-		"active_requests", c.activeRequestsCount())
-	return processID, cancelCtx
+	if processID == uuid.Nil {
+		return uuid.Nil, errors.New("process_id not found in context")
+	}
+
+	return processID, nil
+}
+
+func (c *Controller) createProcessMiddleware() gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		processID := uuid.New()
+		cancelCtx, cancel := context.WithCancel(ctx.Request.Context())
+		c.activeRequests.Store(processID, cancel)
+
+		ctx.Request = ctx.Request.WithContext(cancelCtx)
+
+		ctx.Set("process_id", processID)
+
+		slog.Debug("Created new process context",
+			"process_id", processID,
+			"active_requests", c.activeRequestsCount())
+
+		ctx.Next()
+	}
 }
 
 func (c *Controller) cleanupProcess(processID uuid.UUID) {

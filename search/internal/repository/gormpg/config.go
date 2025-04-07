@@ -1,12 +1,12 @@
 package gormpg
 
 type Config struct {
-	DSN      string
-	DBName   string
-	User     string
-	Password string
-	Host     string
-	Port     string
+	DSN      string `yaml:"url"`
+	DBName   string `yaml:"db_name"`
+	User     string `yaml:"user"`
+	Password string `yaml:"password"`
+	Host     string `yaml:"host"`
+	Port     string `yaml:"port"`
 }
 
 func NewConfig() (*Config, error) {

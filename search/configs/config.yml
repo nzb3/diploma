@@ -1,0 +1,25 @@
+production:
+  ollama:
+    generator:
+      url: http://ollama-generator:11434/
+    embedder:
+      url: http://ollama-embedder:11434/
+    logger:
+      level: error
+  postgres:
+    url: postgres://postgres:postgres@postgres:5432/postgres?sslmode=disable
+debug:
+  ollama:
+    generator:
+      url: http://ollama-generator.deltanotes.orb.local
+    embedder:
+      url: http://ollama-embedder.deltanotes.orb.local
+  logger:
+    level: debug
+  postgres:
+    url: postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
+  vector_storage:
+    num_of_results: 10
+    max_tokens: 2048
+    embedding_dimensions: 384
+
