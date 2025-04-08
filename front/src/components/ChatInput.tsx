@@ -1,4 +1,7 @@
 import { useState } from 'react';
+import { Box, TextField, Button, Paper } from '@mui/material';
+import SendIcon from '@mui/icons-material/Send';
+import StopIcon from '@mui/icons-material/Stop';
 
 interface ChatInputProps {
   onSubmit: (question: string) => Promise<void>;
@@ -19,34 +22,115 @@ export function ChatInput({ onSubmit, onCancel, isLoading }: ChatInputProps) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="p-4 border-t">
-      <div className="flex space-x-4">
-        <input
-          type="text"
+    <Paper 
+      elevation={4} 
+      sx={{ 
+        p: 1.5, 
+        borderTop: 1, 
+        borderColor: 'divider',
+        position: 'sticky',
+        maxWidth: '50%',
+        bottom: 16,
+        mx: 'auto',
+        mb: 2,
+        bgcolor: 'rgba(255, 255, 255, 0.8)',
+        backdropFilter: 'blur(8px)',
+        borderRadius: 2,
+        boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)',
+        zIndex: 10,
+        transform: 'translateY(-8px)',
+        transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
+        '&:hover': {
+          transform: 'translateY(-10px)',
+          boxShadow: '0 6px 24px rgba(0, 0, 0, 0.15)',
+        }
+      }}
+    >
+      <Box component="form" onSubmit={handleSubmit} sx={{ display: 'flex', gap: 1.5, margin: 0}}>
+        <TextField
+          fullWidth
+          size="small"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="Ask a question..."
-          className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
           disabled={isLoading}
+          sx={{
+            '& .MuiOutlinedInput-root': {
+              '& fieldset': {
+                borderColor: 'divider',
+                borderWidth: '1px',
+              },
+              '&:hover fieldset': {
+                borderColor: 'primary.main',
+              },
+              '&.Mui-focused fieldset': {
+                borderColor: 'primary.main',
+                borderWidth: '2px',
+              },
+              fontSize: '0.9rem',
+              borderRadius: 1.5,
+            },
+            '& .MuiOutlinedInput-notchedOutline': {
+              borderRadius: 1.5,
+            },
+            '& .Mui-focused .MuiOutlinedInput-notchedOutline': {
+              borderRadius: 1.5,
+            },
+            '& .MuiInputBase-input:focus': {
+              boxShadow: 'none',
+            },
+            '& .MuiOutlinedInput-input': {
+              '&:focus': {
+                outline: 'none',
+              }
+            }
+          }}
         />
         {isLoading ? (
-          <button
-            type="button"
+          <Button
+            variant="contained"
+            color="error"
+            size="small"
             onClick={onCancel}
-            className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+            startIcon={<StopIcon fontSize="small" />}
+            sx={{ 
+              minWidth: 90,
+              px: 2,
+              py: 0.75,
+              borderRadius: 1.5,
+              boxShadow: 2,
+              '&:hover': {
+                bgcolor: 'error.dark',
+                boxShadow: 3,
+              }
+            }}
           >
             Cancel
-          </button>
+          </Button>
         ) : (
-          <button
+          <Button
+            variant="contained"
+            color="primary"
+            size="small"
             type="submit"
             disabled={!input.trim() || isLoading}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            startIcon={<SendIcon fontSize="small" />}
+            sx={{ 
+              minWidth: 90,
+              px: 2,
+              py: 0.75,
+              borderRadius: 1.5,
+              boxShadow: 2,
+              '&:hover': {
+                bgcolor: 'primary.dark',
+                boxShadow: 3,
+              }
+            }}
           >
             Send
-          </button>
+          </Button>
         )}
-      </div>
-    </form>
+      </Box>
+    </Paper>
   );
 } 

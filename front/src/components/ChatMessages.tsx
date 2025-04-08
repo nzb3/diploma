@@ -1,4 +1,5 @@
 import { useRef, useEffect } from 'react';
+import { Box, Paper } from '@mui/material';
 import { FormatMessageContent } from './FormatMessageContent';
 import { Message } from '../types/api';
 
@@ -19,26 +20,66 @@ export function ChatMessages({ messages, openResourceModal }: ChatMessagesProps)
   }, [messages]);
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 space-y-4">
-      {messages.map((message, index) => (
-        <div
-          key={index}
-          className={`flex ${
-            message.role === 'user' ? 'justify-end' : 'justify-start'
-          }`}
-        >
-          <div
-            className={`max-w-3xl rounded-lg px-4 py-2 ${
-              message.role === 'user'
-                ? 'bg-blue-600 text-white'
-                : 'bg-white text-gray-900 shadow'
-            }`}
+    <Box 
+      sx={{ 
+        flex: 1,
+        height: '100%',
+        overflowY: 'auto', 
+        p: 3,
+        display: 'flex', 
+        flexDirection: 'column',
+        alignItems: 'center'
+      }}
+    >
+      <Box
+        sx={{
+          width: '100%',
+          maxWidth: '50%',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 2,
+          pb: 20
+        }}
+      >
+        {messages.map((message, index) => (
+          <Box
+            key={index}
+            sx={{
+              display: 'flex',
+              justifyContent: message.role === 'user' ? 'flex-end' : 'flex-start',
+              width: '100%'
+            }}
           >
-            <FormatMessageContent content={message.content} openResourceModal={openResourceModal} />
-          </div>
-        </div>
-      ))}
-      <div ref={messagesEndRef} />
-    </div>
+            <Paper
+              elevation={message.role === 'user' ? 0 : 1}
+              sx={{
+                maxWidth: '75%',
+                px: 2,
+                py: 1.5,
+                borderRadius: 2,
+                backgroundColor: message.role === 'user' 
+                  ? 'primary.main' 
+                  : 'background.paper',
+                color: message.role === 'user' 
+                  ? 'white' 
+                  : 'text.primary',
+                overflowWrap: 'break-word',
+                wordBreak: 'break-word',
+                '& a': {
+                  color: message.role === 'user' ? 'white' : 'primary.main',
+                  textDecoration: 'underline',
+                  '&:hover': {
+                    textDecoration: 'none'
+                  }
+                }
+              }}
+            >
+              <FormatMessageContent content={message.content} openResourceModal={openResourceModal} />
+            </Paper>
+          </Box>
+        ))}
+        <div ref={messagesEndRef} />
+      </Box>
+    </Box>
   );
 } 
