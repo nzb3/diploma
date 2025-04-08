@@ -204,13 +204,11 @@ func (s *VectorStorage) ask(ctx context.Context, question string, refsChan chan<
 	const op = "VectorStorage.ask"
 	slog.DebugContext(ctx, "Processing question", "question", question)
 
-	refs := make([]models.Reference, 0)
 	cb := callback.NewCallbackHandler(
 		callback.WithRetrieverEndFunc(
 			func(ctx context.Context, query string, documents []schema.Document) {
 				slog.Info("On retrieving was received documents", "documents_count", len(documents))
-				refs = parseReferences(documents)
-				refsChan <- refs
+				refsChan <- parseReferences(documents)
 			},
 		),
 	)
@@ -253,8 +251,7 @@ func (s *VectorStorage) ask(ctx context.Context, question string, refsChan chan<
 		return models.SearchResult{}, fmt.Errorf("%s: %w", op, err)
 	case answer := <-answerChan:
 		return models.SearchResult{
-			Answer:     answer,
-			References: refs,
+			Answer: answer,
 		}, nil
 	}
 }

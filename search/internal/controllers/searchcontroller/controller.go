@@ -224,6 +224,8 @@ func (c *Controller) handleResult(ctx *gin.Context, processID uuid.UUID, result 
 func (c *Controller) handleError(ctx *gin.Context, processID uuid.UUID, err error) bool {
 	slog.Error("Stream processing error", "process_id", processID, "error", err)
 
+	ctx.Status(http.StatusInternalServerError)
+
 	controllers.SendSSEEvent(ctx, "error", gin.H{
 		"process_id": processID.String(),
 		"error":      err.Error(),
