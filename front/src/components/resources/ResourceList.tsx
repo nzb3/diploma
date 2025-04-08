@@ -1,5 +1,22 @@
 import { Resource } from '../../types/api';
 import { ResourceListItem } from './ResourceListItem';
+import { ResourceLegend } from './ResourceLegend';
+import { 
+  Box, 
+  Card, 
+  CardContent, 
+  Typography, 
+  List, 
+  CircularProgress,
+  IconButton,
+  Divider,
+  Collapse,
+  Chip
+} from '@mui/material';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import { useState } from 'react';
+import { getStatusDescription } from '@services/utils';
 
 interface ResourceListProps {
   resources: Resource[];
@@ -18,51 +35,106 @@ export function ResourceList({
   onDeleteResource,
   onRefreshResources,
 }: ResourceListProps) {
+  const [showLegend, setShowLegend] = useState(false);
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'completed':
+        return 'success';
+      case 'failed':
+        return 'error';
+      case 'processing':
+        return 'warning';
+      default:
+        return 'default';
+    }
+  };
+
+
+  const renderStatusChip = (status: string) => (
+    <Chip
+      size="small"
+      label={getStatusDescription(status)}
+      sx={{
+        borderRadius: 1,
+        backgroundColor: getStatusColor(status) === 'success'
+          ? 'rgba(76, 175, 80, 0.1)'
+          : getStatusColor(status) === 'error'
+          ? 'rgba(244, 67, 54, 0.1)'
+          : getStatusColor(status) === 'warning'
+          ? 'rgba(255, 152, 0, 0.1)'
+          : 'rgba(255, 255, 255, 0.1)',
+        color: getStatusColor(status) === 'success'
+          ? '#2E7D32'
+          : getStatusColor(status) === 'error'
+          ? '#C62828'
+          : getStatusColor(status) === 'warning'
+          ? '#E65100'
+          : 'rgba(255, 255, 255, 0.5)',
+        fontWeight: 500,
+        '& .MuiChip-label': {
+          padding: '0 8px',
+        },
+      }}
+    />
+  );
+
   return (
-    <div className="bg-white shadow sm:rounded-lg">
-      <div className="px-4 py-5 sm:p-6">
-        <div className="flex justify-between items-center">
-          <h3 className="text-lg font-medium leading-6 text-gray-900">Resources</h3>
-          <div className="flex items-center space-x-2">
-            {isLoading && (
-              <div className="animate-pulse flex space-x-1">
-                <div className="h-2 w-2 bg-blue-500 rounded-full"></div>
-                <div className="h-2 w-2 bg-blue-500 rounded-full"></div>
-                <div className="h-2 w-2 bg-blue-500 rounded-full"></div>
-              </div>
-            )}
-            <button
+    <Card elevation={1}>
+      <CardContent>
+        <Box display="flex" justifyContent="space-between" alignItems="center">
+          <Typography variant="h6" component="h3">Resources</Typography>
+          <Box display="flex" alignItems="center" gap={1}>
+            <IconButton
+              onClick={() => setShowLegend(prev => !prev)}
+              size="small"
+              sx={{ mr: 1 }}
+            >
+              <HelpOutlineIcon fontSize="small" />
+            </IconButton>
+            {isLoading && <CircularProgress size={24} />}
+            <IconButton
               onClick={onRefreshResources}
               disabled={isLoading}
-              className="p-1 rounded-full hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-              title="Refresh resources"
+              aria-label="Refresh resources"
+              size="small"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-            </button>
-          </div>
-        </div>
-        <div className="mt-5">
+              <RefreshIcon fontSize="small" />
+            </IconButton>
+          </Box>
+        </Box>
+        
+        <Collapse in={showLegend}>
+          <Box mt={2}>
+            <ResourceLegend />
+          </Box>
+        </Collapse>
+        
+        <Box mt={2}>
           {resources.length === 0 ? (
-            <div className="text-center py-10 text-gray-500">
-              No resources found. Upload a resource to get started.
-            </div>
+            <Box textAlign="center" py={5}>
+              <Typography color="text.secondary">
+                No resources found. Upload a resource to get started.
+              </Typography>
+            </Box>
           ) : (
-            <ul className="divide-y divide-gray-200">
-              {resources.map((resource) => (
-                <ResourceListItem
-                  key={resource.id}
-                  resource={resource}
-                  onResourceClick={onResourceClick}
-                  onDeleteResource={onDeleteResource}
-                  uploadError={uploadErrors[resource.id]}
-                />
+            <List disablePadding>
+              {resources.map((resource, index) => (
+                <Box key={resource.id}>
+                  {index > 0 && <Divider component="li" />}
+                  <ResourceListItem
+                    resource={resource}
+                    onResourceClick={onResourceClick}
+                    onDeleteResource={onDeleteResource}
+                    uploadError={uploadErrors[resource.id]}
+                    renderStatusChip={renderStatusChip}
+                  />
+                </Box>
               ))}
-            </ul>
+            </List>
           )}
-        </div>
-      </div>
-    </div>
+        </Box>
+      </CardContent>
+    </Card>
   );
 } 

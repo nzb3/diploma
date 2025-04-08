@@ -1,5 +1,27 @@
-import { Dialog } from '@headlessui/react';
 import { Resource } from '../../types/api';
+import {
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Typography,
+  Box,
+  Chip,
+  IconButton,
+  Button,
+  CircularProgress,
+  Link,
+  Paper,
+  Divider
+} from '@mui/material';
+import CloseIcon from '@mui/icons-material/Close';
+import DescriptionIcon from '@mui/icons-material/Description';
+import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
+import AccessTimeIcon from '@mui/icons-material/AccessTime';
+import LinkIcon from '@mui/icons-material/Link';
+import { getStatusDescription } from '@services/utils';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface ResourceModalProps {
   isOpen: boolean;
@@ -25,92 +47,213 @@ export function ResourceModal({
     }
   };
 
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'completed':
+        return 'success';
+      case 'failed':
+        return 'error';
+      case 'processing':
+        return 'warning';
+      default:
+        return 'default';
+    }
+  };
+
   return (
     <Dialog
       open={isOpen}
       onClose={onClose}
-      className="relative z-10"
+      maxWidth="md"
+      fullWidth
     >
-      <div className="fixed inset-0 bg-black bg-opacity-25" />
+      {resource && (
+        <>
+          <DialogTitle sx={{ m: 0, p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Box display="flex" alignItems="center" gap={1}>
+              <Typography variant="h6" component="span">
+                {resource.name}
+              </Typography>
+              <Chip
+                size="small"
+                label={getStatusDescription(resource.status)}
+                sx={{
+                  borderRadius: 1,
+                  backgroundColor: getStatusColor(resource.status) === 'success'
+                    ? 'rgba(76, 175, 80, 0.1)'
+                    : getStatusColor(resource.status) === 'error'
+                    ? 'rgba(244, 67, 54, 0.1)'
+                    : getStatusColor(resource.status) === 'warning'
+                    ? 'rgba(255, 152, 0, 0.1)'
+                    : 'rgba(255, 255, 255, 0.1)',
+                  color: getStatusColor(resource.status) === 'success'
+                    ? '#2E7D32'
+                    : getStatusColor(resource.status) === 'error'
+                    ? '#C62828'
+                    : getStatusColor(resource.status) === 'warning'
+                    ? '#E65100'
+                    : 'rgba(255, 255, 255, 0.5)',
+                  fontWeight: 500,
+                  '& .MuiChip-label': {
+                    px: 1.5,
+                  }
+                }}
+              />
+            </Box>
+            <IconButton
+              aria-label="close"
+              onClick={onClose}
+              sx={{
+                color: (theme) => theme.palette.grey[500],
+              }}
+            >
+              <CloseIcon />
+            </IconButton>
+          </DialogTitle>
 
-      <div className="fixed inset-0 overflow-y-auto">
-        <div className="flex min-h-full items-center justify-center p-4 text-center">
-          <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-xl transition-all">
-            {resource && (
-              <>
-                <div className="text-lg font-medium leading-6 text-gray-900 flex justify-between items-center">
-                  <div>
-                    <span>{resource.name}</span>
-                    <span className={`ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                      resource.status === 'completed' || resource.status === 'processed' 
-                        ? 'bg-green-100 text-green-800' 
-                        : resource.status === 'failed'
-                        ? 'bg-red-100 text-red-800'
-                        : 'bg-yellow-100 text-yellow-800'
-                    }`}>
-                      {resource.status}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    className="rounded-md bg-white text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    onClick={onClose}
-                  >
-                    <span className="sr-only">Close</span>
-                    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-                
-                <div className="mt-2">
-                  <div className="flex space-x-2 text-sm text-gray-500 mb-2">
-                    <span>Type: {resource.type}</span>
-                    <span>•</span>
-                    <span>Created: {new Date(resource.created_at).toLocaleString()}</span>
-                  </div>
-                  
-                  {isLoading ? (
-                    <div className="flex justify-center py-8">
-                      <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500"></div>
-                    </div>
+          <DialogContent dividers>
+            <Box display="grid" gridTemplateColumns="repeat(2, 1fr)" gap={2} mb={2}>
+              <Box display="flex" alignItems="center" gap={1} color="text.secondary">
+                <DescriptionIcon fontSize="small" />
+                <Typography variant="body2">
+                  Type: <Box component="span" sx={{ color: 'text.primary', fontWeight: 'medium' }}>{resource.type}</Box>
+                </Typography>
+              </Box>
+              {resource.url && (
+                <Box display="flex" alignItems="center" gap={1} color="text.secondary">
+                  <LinkIcon fontSize="small" />
+                  <Typography variant="body2">
+                    URL: <Box component="span" sx={{ color: 'text.primary', fontWeight: 'medium' }}>
+                      <Link href={resource.url} target="_blank" rel="noopener noreferrer" sx={{ wordBreak: 'break-all' }}>
+                        {resource.url}
+                      </Link>
+                    </Box>
+                  </Typography>
+                </Box>
+              )}
+              <Box display="flex" alignItems="center" gap={1} color="text.secondary">
+                <CalendarTodayIcon fontSize="small" />
+                <Typography variant="body2">
+                  Created: <Box component="span" sx={{ color: 'text.primary', fontWeight: 'medium' }}>
+                    {new Date(resource.created_at).toLocaleDateString()}
+                  </Box>
+                </Typography>
+              </Box>
+              <Box display="flex" alignItems="center" gap={1} color="text.secondary">
+                <AccessTimeIcon fontSize="small" />
+                <Typography variant="body2">
+                  Last Updated: <Box component="span" sx={{ color: 'text.primary', fontWeight: 'medium' }}>
+                    {new Date(resource.updated_at).toLocaleDateString()}
+                  </Box>
+                </Typography>
+              </Box>
+            </Box>
+
+            <Divider sx={{ my: 2 }} />
+
+            {isLoading ? (
+              <Box display="flex" justifyContent="center" py={4}>
+                <CircularProgress />
+              </Box>
+            ) : (
+              <Paper 
+                variant="outlined" 
+                sx={{ 
+                  p: 2, 
+                  maxHeight: 400, 
+                  overflow: 'auto',
+                  bgcolor: 'background.default'
+                }}
+              >
+                <Box>
+                  <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                    Content:
+                  </Typography>
+                  {resource.extracted_content ? (
+                    <Box sx={{ 
+                      fontFamily: 'inherit',
+                      '& h1, & h2, & h3, & h4, & h5, & h6': {
+                        mt: 2,
+                        mb: 1,
+                        fontWeight: 600,
+                        lineHeight: 1.25
+                      },
+                      '& h1': { fontSize: '1.75rem' },
+                      '& h2': { fontSize: '1.5rem' },
+                      '& h3': { fontSize: '1.25rem' },
+                      '& h4': { fontSize: '1.1rem' },
+                      '& h5': { fontSize: '1rem' },
+                      '& h6': { fontSize: '0.9rem' },
+                      '& p': { mb: 1.5, mt: 0 },
+                      '& a': { color: 'primary.main', textDecoration: 'none', '&:hover': { textDecoration: 'underline' } },
+                      '& img': { maxWidth: '100%' },
+                      '& blockquote': { 
+                        borderLeft: '4px solid', 
+                        borderColor: 'divider',
+                        pl: 2,
+                        ml: 0,
+                        color: 'text.secondary' 
+                      },
+                      '& pre': { 
+                        backgroundColor: 'action.hover',
+                        p: 2,
+                        borderRadius: 1,
+                        overflow: 'auto',
+                        fontFamily: 'monospace',
+                        fontSize: '0.875rem'
+                      },
+                      '& code': {
+                        backgroundColor: 'action.hover',
+                        p: 0.5,
+                        borderRadius: 0.5,
+                        fontFamily: 'monospace',
+                        fontSize: '0.875rem'
+                      },
+                      '& ul, & ol': { pl: 3 },
+                      '& li': { mb: 0.5 },
+                      '& table': {
+                        borderCollapse: 'collapse',
+                        width: '100%'
+                      },
+                      '& th, & td': {
+                        border: '1px solid',
+                        borderColor: 'divider',
+                        p: 1,
+                        textAlign: 'left'
+                      },
+                      '& th': {
+                        backgroundColor: 'action.hover'
+                      }
+                    }}>
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {resource.extracted_content}
+                      </ReactMarkdown>
+                    </Box>
                   ) : (
-                    <div className="border border-gray-200 rounded-md p-4 max-h-96 overflow-auto">
-                      {resource.type === 'url' ? (
-                        <div>
-                          <a 
-                            href={resource.extracted_content || ''} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="text-blue-600 hover:underline break-all"
-                          >
-                            {resource.extracted_content || 'No URL available'}
-                          </a>
-                        </div>
-                      ) : (
-                        <pre className="whitespace-pre-wrap text-sm font-mono">
-                          {resource.extracted_content || 
-                          (resource.raw_content ? decodeContent(resource.raw_content) : 'No content available')}
-                        </pre>
-                      )}
-                    </div>
+                    <Typography
+                      component="pre"
+                      sx={{
+                        whiteSpace: 'pre-wrap',
+                        fontFamily: 'monospace',
+                        fontSize: '0.875rem',
+                        m: 0
+                      }}
+                    >
+                      {resource.raw_content ? decodeContent(resource.raw_content) : 'No content available'}
+                    </Typography>
                   )}
-                </div>
-
-                <div className="mt-4 flex justify-end">
-                  <button
-                    type="button"
-                    className="inline-flex justify-center rounded-md border border-transparent bg-blue-100 px-4 py-2 text-sm font-medium text-blue-900 hover:bg-blue-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
-                    onClick={onClose}
-                  >
-                    Close
-                  </button>
-                </div>
-              </>
+                </Box>
+              </Paper>
             )}
-          </Dialog.Panel>
-        </div>
-      </div>
+          </DialogContent>
+
+          <DialogActions>
+            <Button onClick={onClose} color="primary">
+              Close
+            </Button>
+          </DialogActions>
+        </>
+      )}
     </Dialog>
   );
 } 

@@ -1,6 +1,7 @@
 export interface Resource {
   id: string;
   name: string;
+  url: string;
   type: string;
   status: string;
   created_at: string;
