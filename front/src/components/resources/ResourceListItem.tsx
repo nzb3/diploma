@@ -6,13 +6,14 @@ import {
   Box,
   Button,
   Typography,
-  Tooltip
+  Tooltip,
+  Paper
 } from '@mui/material';
-import VisibilityIcon from '@mui/icons-material/Visibility';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import TextSnippetIcon from '@mui/icons-material/TextSnippet';
 import MarkdownIcon from '@mui/icons-material/Code';
 import LinkIcon from '@mui/icons-material/Link';
+import DeleteIcon from '@mui/icons-material/Delete';
 import { getStatusDescription } from '@services/utils';
 
 interface ResourceListItemProps {
@@ -47,89 +48,96 @@ export function ResourceListItem({
   };
 
   return (
-    <ListItem 
-      sx={{ 
-        py: 2, 
-        cursor: 'pointer', 
-        '&:hover': { 
-          bgcolor: 'action.hover',
-          '& .preview-icon': {
-            opacity: 1,
-          }
-        },
-        position: 'relative',
-        transition: 'background-color 0.2s'
+    <Paper
+      elevation={1}
+      sx={{
+        mb: 1,
+        borderRadius: 2,
+        overflow: 'hidden',
+        transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
+        '&:hover': {
+          transform: 'translateY(-4px)',
+          boxShadow: '0 6px 24px rgba(0, 0, 0, 0.15)',
+        }
       }}
     >
-      <Box 
-        onClick={() => onResourceClick(resource)}
+      <ListItem 
         sx={{ 
-          display: 'flex', 
-          alignItems: 'center', 
-          width: '100%',
-          gap: 2
+          py: 2, 
+          cursor: 'pointer', 
+          '&:hover': { 
+          },
+          position: 'relative',
+          transition: 'background-color 0.2s'
         }}
       >
-        <Box sx={{ minWidth: 24 }}>
-          {getTypeIcon()}
-        </Box>
-        <ListItemText 
-          primary={
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Typography>{resource.name}</Typography>
-              <Tooltip title="Click to preview">
-                <VisibilityIcon 
-                  className="preview-icon" 
-                  fontSize="small" 
-                  sx={{ 
-                    opacity: 0,
-                    color: 'primary.main',
-                    transition: 'opacity 0.2s'
-                  }} 
-                />
-              </Tooltip>
-            </Box>
-          }
-          secondary={
-            <Tooltip title={`Resource type: ${resource.type}`}>
-              <Typography variant="body2" component="span">
-                {resource.type}
-              </Typography>
-            </Tooltip>
-          }
-        />
-      </Box>
-      
-      <Box display="flex" alignItems="center" gap={2}>
-        {resource.status && renderStatusChip && (
-          <Tooltip title={getStatusDescription(resource.status)}>
-            <Box>
-              {renderStatusChip(resource.status)}
-            </Box>
-          </Tooltip>
-        )}
-        
-        {uploadError && (
-          <Typography variant="caption" color="error">
-            {uploadError}
-          </Typography>
-        )}
-        <Button
-          size="small"
-          variant="outlined"
-          color="error"
-          onClick={(e) => {
-            e.stopPropagation();
-            onDeleteResource(resource.id);
-          }}
-          sx={{
-            minWidth: 'auto',
-            borderRadius: 1
+        <Box 
+          onClick={() => onResourceClick(resource)}
+          sx={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            width: '100%',
+            gap: 2
           }}
         >
-          Delete
-        </Button>
-      </Box>
-    </ListItem>
+          <Box sx={{ minWidth: 24 }}>
+            {getTypeIcon()}
+          </Box>
+          <ListItemText 
+            primary={
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Typography>{resource.name}</Typography>
+              </Box>
+            }
+            secondary={
+              <Tooltip title={`Resource type: ${resource.type}`}>
+                <Typography variant="body2" component="span">
+                  {resource.type}
+                </Typography>
+              </Tooltip>
+            }
+          />
+        </Box>
+        
+        <Box display="flex" alignItems="center" gap={2}>
+          {resource.status && renderStatusChip && (
+            <Tooltip title={getStatusDescription(resource.status)}>
+              <Box>
+                {renderStatusChip(resource.status)}
+              </Box>
+            </Tooltip>
+          )}
+          
+          {uploadError && (
+            <Typography variant="caption" color="error">
+              {uploadError}
+            </Typography>
+          )}
+          <Button
+            size="small"
+            variant="contained"
+            color="error"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDeleteResource(resource.id);
+            }}
+            startIcon={<DeleteIcon fontSize="small" />}
+            sx={{ 
+              minWidth: 90,
+              px: 2,
+              py: 0.75,
+              borderRadius: 1.5,
+              boxShadow: 2,
+              '&:hover': {
+                bgcolor: 'error.dark',
+                boxShadow: 3,
+              }
+            }}
+          >
+            Delete
+          </Button>
+        </Box>
+      </ListItem>
+    </Paper>
   );
 } 

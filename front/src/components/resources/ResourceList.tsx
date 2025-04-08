@@ -9,7 +9,6 @@ import {
   List, 
   CircularProgress,
   IconButton,
-  Divider,
   Collapse,
   Chip
 } from '@mui/material';
@@ -80,7 +79,7 @@ export function ResourceList({
   );
 
   return (
-    <Card elevation={1}>
+    <Card elevation={1} sx={{ width: '100%' }}>
       <CardContent>
         <Box display="flex" justifyContent="space-between" alignItems="center">
           <Typography variant="h6" component="h3">Resources</Typography>
@@ -119,9 +118,8 @@ export function ResourceList({
             </Box>
           ) : (
             <List disablePadding>
-              {resources.map((resource, index) => (
+              {resources.map((resource) => (
                 <Box key={resource.id}>
-                  {index > 0 && <Divider component="li" />}
                   <ResourceListItem
                     resource={resource}
                     onResourceClick={onResourceClick}

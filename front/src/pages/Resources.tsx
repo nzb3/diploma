@@ -6,6 +6,7 @@ import {
   ResourceModal, 
   ResourceUploadForm 
 } from '../components/resources';
+import { Box } from '@mui/material';
 
 export default function ResourcesPage() {
   // Resource state
@@ -129,20 +130,36 @@ export default function ResourcesPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <Box sx={{ display: 'flex', height: '100%' }}>
+      {/* Sidebar with ResourceUploadForm */}
+     
       <ResourceUploadForm 
         onUpload={handleUploadSubmit}
         isUploading={isUploading}
       />
       
-      <ResourceList 
-        resources={resources}
-        isLoading={isLoading}
-        uploadErrors={uploadErrors}
-        onResourceClick={handleResourceClick}
-        onDeleteResource={handleDeleteResource}
-        onRefreshResources={loadResources}
-      />
+      
+      {/* Main content area with ResourceList */}
+      <Box 
+        sx={{ 
+          flexGrow: 1, 
+          p: 3, 
+          overflowY: 'auto', 
+          display: 'flex', 
+          justifyContent: 'center'
+        }}
+      >
+        <Box sx={{ width: '100%', maxWidth: 'lg' }}>
+          <ResourceList 
+            resources={resources}
+            isLoading={isLoading}
+            uploadErrors={uploadErrors}
+            onResourceClick={handleResourceClick}
+            onDeleteResource={handleDeleteResource}
+            onRefreshResources={loadResources}
+          />
+        </Box>
+      </Box>
       
       <ResourceModal 
         isOpen={isModalOpen}
@@ -150,6 +167,6 @@ export default function ResourcesPage() {
         isLoading={isLoadingResource}
         onClose={handleCloseModal}
       />
-    </div>
+    </Box>
   );
 } 

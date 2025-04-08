@@ -169,7 +169,15 @@ export function ResourceUploadForm({ onUpload, isUploading }: ResourceUploadForm
   };
 
   return (
-    <Paper elevation={1} sx={{ p: 3 }}>
+    <Paper 
+      elevation={1} 
+      sx={{ 
+        width: '25%', 
+        minWidth: 300, 
+        p: 2, 
+        overflowY: 'auto',
+      }}
+    >
       <Typography variant="h6" gutterBottom>
         Upload Resource
       </Typography>
