@@ -208,7 +208,7 @@ func (c *Controller) handleResourceUpdate(
 		"status": res.Status,
 	})
 
-	if res.Status == models.StatusProcessed {
+	if res.Status == models.StatusCompleted {
 		c.sendCompletionEvent(ctx, res.ID)
 		return false
 	}

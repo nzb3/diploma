@@ -14,8 +14,9 @@ import (
 type ResourceStatus string
 
 const (
-	StatusSaved     ResourceStatus = "saved"
-	StatusProcessed ResourceStatus = "processed"
+	StatusCompleted  ResourceStatus = "completed"
+	StatusProcessing ResourceStatus = "processing"
+	StatusFailed     ResourceStatus = "failed"
 )
 
 type ResourceType string
@@ -39,11 +40,11 @@ type Resource struct {
 }
 
 func (r *Resource) SetStatusSaved() {
-	r.Status = StatusSaved
+	r.Status = StatusProcessing
 }
 
 func (r *Resource) SetStatusProcessed() {
-	r.Status = StatusProcessed
+	r.Status = StatusCompleted
 }
 
 func (r *Resource) Validate() error {
@@ -81,8 +82,6 @@ func (r *Resource) BeforeCreate(tx *gorm.DB) error {
 	r.CreatedAt = time.Now()
 	r.UpdatedAt = time.Now()
 
-	r.SetStatusSaved()
-
 	if len(r.ChunkIDs) > 0 {
 		return tx.Transaction(func(tx *gorm.DB) error {
 			if err := tx.Create(r).Error; err != nil {
@@ -100,6 +99,7 @@ func (r *Resource) BeforeCreate(tx *gorm.DB) error {
 			return tx.Create(&associations).Error
 		})
 	}
+
 	return nil
 }
 

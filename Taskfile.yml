@@ -10,3 +10,18 @@ tasks:
     cmds:
       - docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d
     silent: true
+  recreate-frontend:
+    cmds:
+      - docker compose up front --build -d
+    silent: true
+  run-frontend-local:
+    cmds:
+      - cd front && npm run dev
+  recreate-backend-debug:
+    cmds:
+      - docker compose -f docker-compose.yml -f docker-compose.debug.yml up search --build -d
+    silent: true
+  recreate-backend-prod:
+    cmds:
+      - docker compose -f docker-compose.yml -f docker-compose.prod.yml up search --build -d
+    silent: true

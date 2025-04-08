@@ -59,14 +59,14 @@ func (p *ResourceProcessor) ProcessResource(ctx context.Context, resource models
 		"chunks_count", len(chunkIDs))
 
 	resource.ChunkIDs = chunkIDs
-	resource.SetStatusProcessed()
+
 	return resource, nil
 }
 
 func (p *ResourceProcessor) extractContent(ctx context.Context, resource models.Resource) (models.Resource, error) {
 	const op = "ResourceProcessor.extractContent"
 	switch resource.Type {
-	case "text", "md":
+	case "text", "md", "markdown":
 		return p.extractText(ctx, resource)
 	case "url":
 		return p.extractContentURL(ctx, resource)

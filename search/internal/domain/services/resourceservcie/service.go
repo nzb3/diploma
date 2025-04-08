@@ -97,65 +97,94 @@ func (s *Service) GetResourceByID(ctx context.Context, resourceID uuid.UUID) (mo
 
 func (s *Service) SaveResource(ctx context.Context, resource models.Resource) (<-chan models.Resource, <-chan error) {
 	const op = "Service.SaveResource"
-	resourceChan := make(chan models.Resource)
-	errChan := make(chan error)
-
+	
+	initialSaveCh := make(chan models.Resource, 1)
+	processedCh := make(chan models.Resource, 1)
+	
+	resultCh := make(chan models.Resource, 2) 
+	errCh := make(chan error, 3) 
+	
+	ctx, cancel := context.WithCancel(ctx)
+	
+	slog.InfoContext(ctx, "Starting resource processing pipeline",
+		"resource_type", resource.Type,
+		"content_size", len(resource.RawContent))
+	
 	go func() {
-		defer func() {
-			close(resourceChan)
-			close(errChan)
-			slog.DebugContext(ctx, "Resource channels closed")
-		}()
-
-		slog.InfoContext(ctx, "Starting resource processing",
-			"resource_type", resource.Type,
-			"content_size", len(resource.RawContent))
-
+		defer close(initialSaveCh)
+		
 		savedResource, err := s.saveResource(ctx, resource)
 		if err != nil {
-			slog.ErrorContext(ctx, "Initial save failed",
-				"op", op,
-				"error", err)
-			errChan <- fmt.Errorf("%s: %w", op, err)
+			slog.ErrorContext(ctx, "Initial save failed", "op", op, "error", err)
+			errCh <- fmt.Errorf("%s: initial save: %w", op, err)
+			cancel()
 			return
 		}
-
-		resourceChan <- *savedResource
-		slog.DebugContext(ctx, "Initial resource state saved",
-			"resource_id", savedResource.ID)
-
-		processedResource, err := s.resourceProcessor.ProcessResource(ctx, *savedResource)
+		
+		savedResource.SetStatusSaved()
+		initialSaveCh <- *savedResource
+		resultCh <- *savedResource
+		
+		slog.DebugContext(ctx, "Initial resource state saved", "resource_id", savedResource.ID)
+	}()
+	
+	go func() {
+		defer close(processedCh)
+		
+		savedResource, ok := <-initialSaveCh
+		if !ok {
+			return 
+		}
+		
+		processedResource, err := s.resourceProcessor.ProcessResource(ctx, savedResource)
 		if err != nil {
-			slog.ErrorContext(ctx, "Resource processing failed",
-				"op", op,
-				"resource_id", savedResource.ID,
+			slog.ErrorContext(ctx, "Resource processing failed", 
+				"op", op, 
+				"resource_id", savedResource.ID, 
 				"error", err)
-			errChan <- fmt.Errorf("%s: %w", op, err)
+			errCh <- fmt.Errorf("%s: processing: %w", op, err)
+			cancel()
 			return
 		}
-
-		slog.DebugContext(ctx, "Updating resource status", "resource_id", resource.ID)
+		
+		processedResource.SetStatusProcessed()
+		processedCh <- processedResource
+		
+		slog.DebugContext(ctx, "Resource processed", "resource_id", processedResource.ID)
+	}()
+	
+	go func() {
+		defer func() {
+			close(resultCh)
+			close(errCh)
+			cancel() 
+			slog.DebugContext(ctx, "Resource channels closed")
+		}()
+		
+		processedResource, ok := <-processedCh
+		if !ok {
+			return
+		}
+		
+		slog.DebugContext(ctx, "Updating resource status", "resource_id", processedResource.ID)
 		updatedResource, err := s.resourceRepo.UpdateResource(ctx, processedResource)
 		if err != nil {
-			slog.ErrorContext(ctx, "Resource update failed",
-				"op", op,
-				"resource_id", resource.ID,
+			slog.ErrorContext(ctx, "Resource update failed", 
+				"op", op, 
+				"resource_id", processedResource.ID, 
 				"error", err)
-			errChan <- err
+			errCh <- fmt.Errorf("%s: update: %w", op, err)
 			return
 		}
-
-		slog.DebugContext(ctx, "Resource status updated",
-			"resource_id", updatedResource.ID,
-			"new_status", updatedResource.Status)
-
-		resourceChan <- *updatedResource
-		slog.InfoContext(ctx, "Resource processing completed",
-			"resource_id", updatedResource.ID,
+		
+		resultCh <- *updatedResource
+		
+		slog.InfoContext(ctx, "Resource processing completed", 
+			"resource_id", updatedResource.ID, 
 			"status", updatedResource.Status)
 	}()
-
-	return resourceChan, errChan
+	
+	return resultCh, errCh
 }
 
 func (s *Service) saveResource(ctx context.Context, resource models.Resource) (*models.Resource, error) {
