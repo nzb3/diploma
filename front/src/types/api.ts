@@ -19,6 +19,7 @@ export interface ResourceEvent {
 export interface Message {
   role: 'user' | 'assistant';
   content: string;
+  references?: Reference[];
 }
 
 export interface Reference {

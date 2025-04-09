@@ -1,4 +1,4 @@
 export * from './ChatInput';
 export * from './ChatMessages';
-export * from './FormatMessageContent';
+export * from './FormatMessage.tsx';
 export * from './ResourceModalView'; 

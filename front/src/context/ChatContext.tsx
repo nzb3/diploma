@@ -93,7 +93,7 @@ export function ChatProvider({ children }: ChatProviderProps) {
     hasReceivedData.current = false;
     currentAnswerRef.current = '';
     
-    setMessages(prev => [...prev, { role: 'user', content: question }]);
+    setMessages(prev => [...prev, { role: 'user', content: question, }]);
     setIsLoading(true);
 
     // Initialize the activity timer
@@ -217,6 +217,37 @@ export function ChatProvider({ children }: ChatProviderProps) {
       // Listen for resources events
       eventSource.addEventListener('resources', () => {
         resetActivityTimer();
+      });
+
+      // Listen for references events
+      eventSource.addEventListener('references', (event) => {
+        console.log('References event received:', event.data);
+        resetActivityTimer();
+        
+        try {
+          const data = JSON.parse(event.data);
+          console.log('Parsed references data:', data);
+          
+          if (data.references && Array.isArray(data.references)) {
+            // Update the assistant message with references
+            setMessages(prev => {
+              const newMessages = [...prev];
+              const lastMessage = newMessages[newMessages.length - 1];
+              if (lastMessage?.role === 'assistant') {
+                lastMessage.references = data.references;
+                return newMessages;
+              } else {
+                return [...prev, { 
+                  role: 'assistant', 
+                  content: currentAnswerRef.current,
+                  references: data.references 
+                }];
+              }
+            });
+          }
+        } catch (error) {
+          console.error('Error parsing references message:', error);
+        }
       });
 
       // Listen for error events

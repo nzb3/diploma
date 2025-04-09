@@ -1,6 +1,6 @@
 import { useRef, useEffect } from 'react';
 import { Box, Paper } from '@mui/material';
-import { FormatMessageContent } from './FormatMessageContent';
+import { FormatMessage } from './FormatMessage.tsx';
 import { Message } from '../types/api';
 
 interface ChatMessagesProps {
@@ -74,7 +74,7 @@ export function ChatMessages({ messages, openResourceModal }: ChatMessagesProps)
                 }
               }}
             >
-              <FormatMessageContent content={message.content} openResourceModal={openResourceModal} />
+              <FormatMessage message={message} openResourceModal={openResourceModal} />
             </Paper>
           </Box>
         ))}
