@@ -72,7 +72,7 @@ func (sp *serviceProvider) EmbeddingLLM(ctx context.Context) *ollama.LLM {
 
 	llm, err := ollama.New(
 		ollama.WithServerURL("http://ollama-embedder:11434/"),
-		ollama.WithModel("all-minilm"),
+		ollama.WithModel("mxbai-embed-large"),
 	)
 	if err != nil {
 		sp.Logger(ctx).Logger().Error("error creating ollama embedding LLM", err)

@@ -12,6 +12,6 @@ func NewConfig(postgresURL string) (*Config, error) {
 	return &Config{
 		NumOfResults:        10,
 		MaxTokens:           2048,
-		EmbeddingDimensions: 384,
+		EmbeddingDimensions: 512,
 	}, nil
 }

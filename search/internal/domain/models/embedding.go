@@ -9,7 +9,7 @@ import (
 type Embedding struct {
 	UUID         uuid.UUID              `gorm:"type:uuid;primaryKey" json:"uuid"`
 	CollectionID uuid.UUID              `gorm:"type:uuid" json:"collection_id"`
-	Embedding    []float32              `gorm:"type:vector(384)" json:"embedding"`
+	Embedding    []float32              `gorm:"type:vector(512)" json:"embedding"`
 	Document     string                 `gorm:"type:text" json:"document"`
 	Cmetadata    map[string]interface{} `gorm:"type:jsonb" json:"cmetadata"`
 }

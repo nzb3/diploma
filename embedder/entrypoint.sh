@@ -3,8 +3,8 @@
 ollama serve &
 sleep 5
 # Pull the desired model
-echo "Pulling all-minilm model..."
-ollama pull all-minilm
+echo "Pulling mxbai-embed-large model..."
+ollama pull mxbai-embed-large
 
 # Keep the container running
 wait
