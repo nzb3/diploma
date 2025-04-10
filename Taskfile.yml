@@ -25,3 +25,7 @@ tasks:
     cmds:
       - docker compose -f docker-compose.yml -f docker-compose.prod.yml up search --build -d
     silent: true
+  down-all-clear:
+    cmds:
+      - docker compose down
+      - rm -r ./postgres/.data
