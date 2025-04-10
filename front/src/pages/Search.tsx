@@ -1,6 +1,6 @@
-import { useResourceModal } from '../hooks';
-import { ChatMessages, ChatInput, ResourceModalView } from '../components';
-import { useChat } from '../context';
+import { useResourceModal } from '@/hooks';
+import { ChatMessages, ChatInput, ResourceModalView } from '@/components';
+import { useChat } from '@/context';
 import { Box } from '@mui/material';
 
 export default function SearchPage() {

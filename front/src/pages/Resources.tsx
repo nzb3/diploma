@@ -5,19 +5,16 @@ import {
   ResourceList, 
   ResourceModal, 
   ResourceUploadForm 
-} from '../components/resources';
+} from '@components/resources';
 import { Box } from '@mui/material';
 
 export default function ResourcesPage() {
-  // Resource state
   const [resources, setResources] = useState<Resource[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   
-  // Upload errors tracking
   const [uploadErrors, setUploadErrors] = useState<Record<string, string>>({});
   
-  // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedResource, setSelectedResource] = useState<Resource | null>(null);
   const [isLoadingResource, setIsLoadingResource] = useState(false);

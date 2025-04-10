@@ -1,8 +1,7 @@
 import axios from 'axios';
 import { Resource, AskRequest, AskResponse, SaveDocumentRequest } from '../types/api';
 
-// In production (Docker), use relative URLs for API requests
-// In development, use the full URL to the backend
+
 const isDevEnvironment = window.location.hostname === 'localhost' && window.location.port !== '80';
 const API_BASE_URL = isDevEnvironment 
   ? 'http://search.deltanotes.orb.local:8080/api/v1'
