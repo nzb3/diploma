@@ -10,8 +10,9 @@ type Config struct {
 func NewConfig(postgresURL string) (*Config, error) {
 	// TODO: load from config file
 	return &Config{
+		PostgresURL:         postgresURL,
 		NumOfResults:        10,
 		MaxTokens:           2048,
-		EmbeddingDimensions: 512,
+		EmbeddingDimensions: 1024,
 	}, nil
 }
