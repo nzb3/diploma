@@ -29,3 +29,5 @@ tasks:
     cmds:
       - docker compose down
       - rm -r ./postgres/.data
+  down-all:
+    cmd: docker compose down
