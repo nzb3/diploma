@@ -40,9 +40,13 @@ func (p *ResourceProcessor) ProcessResource(ctx context.Context, resource models
 		"resource_id", resource.ID,
 		"content_length", len(resource.RawContent))
 
-	resource, err := p.extractContent(ctx, resource)
-	if err != nil {
-		return models.Resource{}, fmt.Errorf("%s: %w", op, err)
+	var err error
+
+	if resource.ExtractedContent == "" {
+		resource, err = p.ExtractContent(ctx, resource)
+		if err != nil {
+			return models.Resource{}, fmt.Errorf("%s: %w", op, err)
+		}
 	}
 
 	chunkIDs, err := p.vectorStorage.PutResource(ctx, resource)
@@ -63,8 +67,8 @@ func (p *ResourceProcessor) ProcessResource(ctx context.Context, resource models
 	return resource, nil
 }
 
-func (p *ResourceProcessor) extractContent(ctx context.Context, resource models.Resource) (models.Resource, error) {
-	const op = "ResourceProcessor.extractContent"
+func (p *ResourceProcessor) ExtractContent(ctx context.Context, resource models.Resource) (models.Resource, error) {
+	const op = "ResourceProcessor.ExtractContent"
 	switch resource.Type {
 	case "text", "md", "markdown":
 		return p.extractText(ctx, resource)
@@ -135,65 +139,80 @@ func (p *ResourceProcessor) extractContentURL(ctx context.Context, resource mode
 
 func (p *ResourceProcessor) loadBodyFromURL(ctx context.Context, url string) (io.ReadCloser, bool, error) {
 	const op = "ResourceProcessor.loadBodyFromURL"
+	select {
+	case <-ctx.Done():
+		return nil, false, ctx.Err()
+	default:
+		resp, err := http.Get(url)
+		if err != nil {
+			slog.ErrorContext(ctx, "Failed to fetch URL",
+				"op", op,
+				"url", url,
+				"error", err)
+			return nil, false, fmt.Errorf("%s: %w", op, err)
+		}
 
-	resp, err := http.Get(url)
-	if err != nil {
-		slog.ErrorContext(ctx, "Failed to fetch URL",
-			"op", op,
-			"url", url,
-			"error", err)
-		return nil, false, fmt.Errorf("%s: %w", op, err)
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			slog.ErrorContext(ctx, "HTTP request failed",
+				"op", op,
+				"url", url,
+				"statusCode", resp.StatusCode)
+			return nil, false, fmt.Errorf("%s: HTTP request failed with status code %d", op, resp.StatusCode)
+		}
+
+		contentType := resp.Header.Get("Content-Type")
+		isPDF := contentType == "application/pdf" || strings.HasSuffix(strings.ToLower(url), ".pdf")
+
+		return resp.Body, isPDF, nil
 	}
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		slog.ErrorContext(ctx, "HTTP request failed",
-			"op", op,
-			"url", url,
-			"statusCode", resp.StatusCode)
-		return nil, false, fmt.Errorf("%s: HTTP request failed with status code %d", op, resp.StatusCode)
-	}
-
-	contentType := resp.Header.Get("Content-Type")
-	isPDF := contentType == "application/pdf" || strings.HasSuffix(strings.ToLower(url), ".pdf")
-
-	return resp.Body, isPDF, nil
 }
 
 func (p *ResourceProcessor) extractContentPDF(ctx context.Context, resource models.Resource) (models.Resource, error) {
 	const op = "ResourceProcessor.extractContentPDF"
-	markdown, err := p.pdfToMD(ctx, resource.RawContent)
-	if err != nil {
-		return models.Resource{}, fmt.Errorf("%s: %w", op, err)
+	select {
+	case <-ctx.Done():
+		return models.Resource{}, ctx.Err()
+	default:
+		markdown, err := p.pdfToMD(ctx, resource.RawContent)
+		if err != nil {
+			return models.Resource{}, fmt.Errorf("%s: %w", op, err)
+		}
+		resource.ExtractedContent = markdown
+		return resource, nil
 	}
-	resource.ExtractedContent = markdown
-	return resource, nil
 }
 
 func (p *ResourceProcessor) pdfToMD(ctx context.Context, rawContent []byte) (string, error) {
 	const op = "ResourceProcessor.PDFToMD"
 
-	doc, err := fitz.NewFromReader(bytes.NewReader(rawContent))
-	if err != nil {
-		return "", fmt.Errorf("%s: %w", op, err)
-	}
-	defer doc.Close()
-
-	numPages := doc.NumPage()
-	var mdContent string
-
-	for i := 0; i < numPages; i++ {
-		html, err := doc.HTML(i, true)
+	select {
+	case <-ctx.Done():
+		return "", ctx.Err()
+	default:
+		doc, err := fitz.NewFromReader(bytes.NewReader(rawContent))
 		if err != nil {
 			return "", fmt.Errorf("%s: %w", op, err)
 		}
+		defer doc.Close()
 
-		text, err := md.ConvertString(html)
-		if err != nil {
-			return "", fmt.Errorf("%s: %w", op, err)
+		numPages := doc.NumPage()
+		var mdContent string
+
+		for i := 0; i < numPages; i++ {
+			html, err := doc.HTML(i, true)
+			if err != nil {
+				return "", fmt.Errorf("%s: %w", op, err)
+			}
+
+			text, err := md.ConvertString(html)
+			if err != nil {
+				return "", fmt.Errorf("%s: %w", op, err)
+			}
+
+			mdContent += text + "\n\n"
 		}
 
-		mdContent += text + "\n\n"
+		return mdContent, nil
 	}
-
-	return mdContent, nil
 }

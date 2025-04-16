@@ -16,7 +16,7 @@ import (
 )
 
 type resourceService interface {
-	SaveResource(ctx context.Context, resource models.Resource) (<-chan models.Resource, <-chan error)
+	SaveResource(ctx context.Context, resource models.Resource, statusUpdateChan chan<- models.ResourceStatusUpdate) (models.Resource, error)
 	GetResources(ctx context.Context) ([]models.Resource, error)
 	GetResourceByID(ctx context.Context, resourceID uuid.UUID) (models.Resource, error)
 	DeleteResource(ctx context.Context, resourceID uuid.UUID) error
@@ -46,8 +46,8 @@ func (c *Controller) RegisterRoutes(router *gin.RouterGroup) {
 }
 
 type SaveDocumentRequest struct {
-	Content []byte `json:"content" binding:"required"`
-	Type    string `json:"type" binding:"required"`
+	Content []byte `binding:"required" json:"content"`
+	Type    string `binding:"required" json:"type"`
 	Name    string `json:"name"`
 	URL     string `json:"url"`
 }
@@ -68,8 +68,40 @@ func (c *Controller) SaveResource() gin.HandlerFunc {
 			return
 		}
 
-		resourceChan, errChan := c.initProcessingChannels(ctx, req)
-		c.handleResourceStream(ctx, resourceChan, errChan)
+		resource := models.Resource{
+			RawContent: req.Content,
+			Type:       models.ResourceType(req.Type),
+			Name:       req.Name,
+			URL:        req.URL,
+		}
+
+		statusUpdateChan := make(chan models.ResourceStatusUpdate)
+		resourceCh := make(chan models.Resource)
+		errCh := make(chan error)
+
+		go func() {
+			resource, err := c.service.SaveResource(ctx, resource, statusUpdateChan)
+			if err != nil {
+				errCh <- err
+			}
+			resourceCh <- resource
+		}()
+
+		ctx.Stream(func(w io.Writer) bool {
+			select {
+			case resource, ok := <-resourceCh:
+				return c.handleResource(ctx, resource, ok)
+			case statusUpdate, ok := <-statusUpdateChan:
+				return c.handleStatusUpdate(ctx, statusUpdate, ok)
+
+			case err := <-errCh:
+				return c.handleResourceError(ctx, err, ok)
+
+			case <-ctx.Done():
+				slog.Warn("Client disconnected", "client", ctx.ClientIP())
+				return false
+			}
+		})
 	}
 }
 
@@ -152,48 +184,23 @@ func (c *Controller) GetResourceByID() gin.HandlerFunc {
 	}
 }
 
-func (c *Controller) initProcessingChannels(
-	ctx *gin.Context,
-	req *SaveDocumentRequest,
-) (<-chan models.Resource, <-chan error) {
-	resource := models.Resource{
-		RawContent: req.Content,
-		Type:       models.ResourceType(req.Type),
-		Name:       req.Name,
-		URL:        req.URL,
+func (c *Controller) handleResource(ctx *gin.Context, resource models.Resource, ok bool) bool {
+	if !ok {
+		return false
 	}
 
-	slog.Debug("Starting resource processing",
-		"resource_type", req.Type,
-		"content_size", len(req.Content))
+	slog.Info("Sending resource", "resource_id", resource.ID)
 
-	resourceChan, errChan := c.service.SaveResource(ctx, resource)
-	return resourceChan, errChan
-}
-
-func (c *Controller) handleResourceStream(
-	ctx *gin.Context,
-	resourceChan <-chan models.Resource,
-	errChan <-chan error,
-) {
-	ctx.Stream(func(w io.Writer) bool {
-		select {
-		case res, ok := <-resourceChan:
-			return c.handleResourceUpdate(ctx, res, ok)
-
-		case err, ok := <-errChan:
-			return c.handleResourceError(ctx, err, ok)
-
-		case <-ctx.Request.Context().Done():
-			slog.Warn("Client disconnected", "client", ctx.ClientIP())
-			return false
-		}
+	controllers.SendSSEEvent(ctx, "resource", gin.H{
+		"resource": resource,
 	})
+
+	return true
 }
 
-func (c *Controller) handleResourceUpdate(
+func (c *Controller) handleStatusUpdate(
 	ctx *gin.Context,
-	res models.Resource,
+	update models.ResourceStatusUpdate,
 	ok bool,
 ) bool {
 	if !ok {
@@ -201,15 +208,15 @@ func (c *Controller) handleResourceUpdate(
 		return false
 	}
 
-	slog.Info("Sending status update", "resource_id", res.ID, "status", res.Status)
+	slog.Info("Sending status update", "resource_id", update.ResourceID, "status", update.Status)
 
 	controllers.SendSSEEvent(ctx, "status_update", gin.H{
-		"id":     res.ID,
-		"status": res.Status,
+		"resource_id": update.ResourceID,
+		"status":      update.Status,
 	})
 
-	if res.Status == models.StatusCompleted {
-		c.sendCompletionEvent(ctx, res.ID)
+	if update.Status == models.ResourceStatusCompleted {
+		c.sendCompletionEvent(ctx, update.ResourceID)
 		return false
 	}
 	return true
@@ -218,7 +225,7 @@ func (c *Controller) handleResourceUpdate(
 func (c *Controller) sendCompletionEvent(ctx *gin.Context, id uuid.UUID) {
 	slog.Info("Resource processing completed", "resource_id", id)
 	controllers.SendSSEEvent(ctx, "completed", gin.H{
-		"id": id,
+		"resource_id": id,
 	})
 }
 

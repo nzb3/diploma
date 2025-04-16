@@ -11,15 +11,9 @@ import (
 	"gorm.io/gorm"
 )
 
-type ResourceStatus string
-
-const (
-	StatusCompleted  ResourceStatus = "completed"
-	StatusProcessing ResourceStatus = "processing"
-	StatusFailed     ResourceStatus = "failed"
-)
-
 type ResourceType string
+
+const ()
 
 type ResourceEvent struct {
 	ID     uuid.UUID      `json:"id"`
@@ -39,12 +33,28 @@ type Resource struct {
 	UpdatedAt        time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
 }
 
-func (r *Resource) SetStatusSaved() {
-	r.Status = StatusProcessing
+func (r *Resource) SetStatusFailed() {
+	r.Status = ResourceStatusFailed
 }
 
-func (r *Resource) SetStatusProcessed() {
-	r.Status = StatusCompleted
+func (r *Resource) SetStatusProcessing() {
+	r.Status = ResourceStatusProcessing
+}
+
+func (r *Resource) SetStatusCompleted() {
+	r.Status = ResourceStatusCompleted
+}
+
+func (r *Resource) UpdateStatus(status ResourceStatus, updateCh ...chan<- ResourceStatusUpdate) {
+	r.Status = status
+	if len(updateCh) > 0 {
+		for _, u := range updateCh {
+			u <- ResourceStatusUpdate{
+				ResourceID: r.ID,
+				Status:     r.Status,
+			}
+		}
+	}
 }
 
 func (r *Resource) Validate() error {
