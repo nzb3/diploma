@@ -34,7 +34,7 @@ func NewServer(ctx context.Context, router *gin.Engine, cfg *Config, controllers
 	go func() {
 		<-ctx.Done()
 		shutdownCtx, cancel := context.WithTimeout(
-			context.Background(),
+			ctx,
 			cfg.HTTP.ShutdownTimeout,
 		)
 		defer cancel()
