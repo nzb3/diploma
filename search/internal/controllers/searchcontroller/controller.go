@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"sync"
 
 	"github.com/gin-gonic/gin"
@@ -18,7 +19,7 @@ import (
 
 type searchService interface {
 	GetAnswer(ctx context.Context, question string, refsChan chan<- []models.Reference) (models.SearchResult, error)
-	GetAnswerStream(ctx context.Context, question string) (<-chan models.SearchResult, <-chan []models.Reference, <-chan []byte, <-chan error)
+	GetAnswerStream(ctx context.Context, question string, referencesChan chan<- []models.Reference, chunkChan chan<- []byte) (models.SearchResult, error)
 	SemanticSearch(ctx context.Context, query string) ([]models.Reference, error)
 }
 
@@ -47,7 +48,7 @@ func (c *Controller) RegisterRoutes(router *gin.RouterGroup) {
 
 	searchGroup := router.Group("/search")
 	{
-		searchGroup.POST("/", c.SemanticSearch())
+		searchGroup.GET("/", c.SemanticSearch())
 	}
 }
 
@@ -123,8 +124,23 @@ func (c *Controller) AskStream() gin.HandlerFunc {
 			"process_id", processID,
 			"question", question,
 			"client", ctx.ClientIP())
+		chunkChan := make(chan []byte, 1)
+		referencesChan := make(chan []models.Reference, 1)
+		resultChan := make(chan models.SearchResult, 1)
+		errChan := make(chan error, 1)
+		go func() {
+			defer func() {
+				close(referencesChan)
+				close(chunkChan)
+			}()
 
-		resultChan, referencesChan, chunkChan, errChan := c.searchService.GetAnswerStream(ctx, question)
+			result, err := c.searchService.GetAnswerStream(ctx, question, referencesChan, chunkChan)
+			if err != nil {
+				errChan <- err
+			}
+
+			resultChan <- result
+		}()
 
 		ctx.Stream(func(w io.Writer) bool {
 			select {
@@ -224,6 +240,11 @@ func (c *Controller) handleResult(ctx *gin.Context, processID uuid.UUID, result 
 func (c *Controller) handleError(ctx *gin.Context, processID uuid.UUID, err error) bool {
 	slog.Error("Stream processing error", "process_id", processID, "error", err)
 
+	if err == nil {
+		slog.Error("RECEIVED NIL ERROR")
+		return false
+	}
+
 	ctx.Status(http.StatusInternalServerError)
 
 	controllers.SendSSEEvent(ctx, "error", gin.H{
@@ -287,28 +308,41 @@ type SearchResponse struct {
 func (c *Controller) SemanticSearch() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		slog.Info("Handling semantic search request")
-		var req SearchRequest
-		if err := ctx.ShouldBindJSON(&req); err != nil {
-			slog.Error("Invalid search request", "error", err)
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+
+		question := ctx.Query("question")
+		if question == "" {
+			slog.Error("Missing required query parameter: question")
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "Missing required query parameter: question"})
 			return
 		}
 
-		slog.Debug("Executing semantic search",
-			"query", req.Query,
-			"max_results", req.MaxResults)
+		maxResults := 10 // Default value
+		maxResultsStr := ctx.Query("max_results")
+		if maxResultsStr != "" {
+			var err error
+			maxResults, err = strconv.Atoi(maxResultsStr)
+			if err != nil {
+				slog.Error("Invalid max_results parameter", "error", err)
+				ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid max_results parameter: must be an integer"})
+				return
+			}
+		}
 
-		references, err := c.searchService.SemanticSearch(ctx, req.Query)
+		slog.Debug("Executing semantic search",
+			"query", question,
+			"max_results", maxResults)
+
+		references, err := c.searchService.SemanticSearch(ctx, question)
 		if err != nil {
 			slog.Error("Semantic search failed",
 				"error", err,
-				"query", req.Query)
+				"query", question)
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 
 		slog.Info("Semantic search completed",
-			"query", req.Query,
+			"query", question,
 			"results_count", len(references))
 		ctx.JSON(http.StatusOK, SearchResponse{References: references})
 	}

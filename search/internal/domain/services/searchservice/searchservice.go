@@ -32,103 +32,55 @@ func NewService(vs vectorStorage, r repository) *Service {
 	return &Service{vectorStorage: vs, repository: r}
 }
 
-func (ss *Service) GetAnswerStream(ctx context.Context, question string) (
-	<-chan models.SearchResult,
-	<-chan []models.Reference,
-	<-chan []byte,
-	<-chan error,
-) {
+func (ss *Service) GetAnswerStream(
+	ctx context.Context,
+	question string,
+	referencesChan chan<- []models.Reference,
+	chunkChan chan<- []byte,
+) (models.SearchResult, error) {
 	const op = "Service.GetAnswerStream"
 
-	chunks := make(chan []byte, 10)
-	rawResults := make(chan models.SearchResult, 1)
 	rawRefs := make(chan []models.Reference, 1)
-	errs := make(chan error, 2)
 
-	results := make(chan models.SearchResult, 1)
-	refs := make(chan []models.Reference, 1)
-
-	handleErr := func(err error) {
-		select {
-		case errs <- fmt.Errorf("%s: %w", op, err):
-		default:
-		}
-	}
+	errChan := make(chan error, 1)
 
 	go func() {
-		defer close(chunks)
-		defer close(rawResults)
-		defer close(rawRefs)
-
-		result, err := ss.vectorStorage.GetAnswerStream(ctx, question, rawRefs, chunks)
-		if err != nil {
-			handleErr(err)
+		select {
+		case <-ctx.Done():
+			slog.Debug("Context cancelled")
+			errChan <- ctx.Err()
 			return
+		case refs := <-rawRefs:
+			processedRefs, err := ss.provideReferencesWithResourceID(ctx, refs)
+			if err != nil {
+				slog.Error("Error processing references", "err", err)
+				return
+			}
+			referencesChan <- processedRefs
+		}
+	}()
+
+	select {
+	case <-ctx.Done():
+		slog.Debug("Context cancelled")
+		return models.SearchResult{}, ctx.Err()
+	case err := <-errChan:
+		return models.SearchResult{}, fmt.Errorf("%s: %w", op, err)
+	default:
+		result, err := ss.vectorStorage.GetAnswerStream(ctx, question, rawRefs, chunkChan)
+		if err != nil {
+			slog.Error("Error getting answer stream", "err", err)
+			return models.SearchResult{}, fmt.Errorf("%s: %w", op, err)
 		}
 
 		processedResult, err := ss.processResult(ctx, result)
 		if err != nil {
-			handleErr(err)
-			return
+			slog.Error("Error processing result", "err", err)
+			return models.SearchResult{}, fmt.Errorf("%s: %w", op, err)
 		}
 
-		rawResults <- processedResult
-	}()
-
-	go func() {
-		defer close(results)
-		defer close(refs)
-		defer close(errs)
-
-		var processedReferences []models.Reference
-		var result models.SearchResult
-		var refsReceived, resultReceived bool
-
-		for !refsReceived || !resultReceived {
-			select {
-			case <-ctx.Done():
-				errs <- ctx.Err()
-				return
-
-			case references, ok := <-rawRefs:
-				if !ok {
-					refsReceived = true
-					continue
-				}
-
-				var err error
-				processedReferences, err = ss.provideReferencesWithResourceID(ctx, references)
-				if err != nil {
-					handleErr(err)
-					return
-				}
-
-				refs <- processedReferences
-				refsReceived = true
-
-				if resultReceived {
-					result.References = processedReferences
-					results <- result
-				}
-
-			case r, ok := <-rawResults:
-				if !ok {
-					resultReceived = true
-					continue
-				}
-
-				result = r
-				resultReceived = true
-
-				if refsReceived {
-					result.References = processedReferences
-					results <- result
-				}
-			}
-		}
-	}()
-
-	return results, refs, chunks, errs
+		return processedResult, nil
+	}
 }
 
 func (ss *Service) GetAnswer(ctx context.Context, question string, refsChan chan<- []models.Reference) (models.SearchResult, error) {
