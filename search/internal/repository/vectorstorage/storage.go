@@ -205,12 +205,7 @@ func (s *VectorStorage) ask(ctx context.Context, question string, refsChan chan<
 	slog.DebugContext(ctx, "Processing question", "question", question)
 
 	cb := callback.NewCallbackHandler(
-		callback.WithRetrieverEndFunc(
-			func(ctx context.Context, query string, documents []schema.Document) {
-				slog.Info("On retrieving was received documents", "documents_count", len(documents))
-				refsChan <- parseReferences(documents)
-			},
-		),
+		callback.WithRetrieverEndFunc(newRetrieverEndHandler(refsChan, internalRefsChan)),
 	)
 
 	retriever := s.setupRetriever(cb)
@@ -256,7 +251,22 @@ func (s *VectorStorage) ask(ctx context.Context, question string, refsChan chan<
 	}
 }
 
-func (s *VectorStorage) setupRetriever(callbackHandler ...*callback.Handler) vectorstores.Retriever {
+func newRetrieverEndHandler(refsChans ...chan<- []models.Reference) func(ctx context.Context, query string, documents []schema.Document) {
+	return func(ctx context.Context, query string, documents []schema.Document) {
+		slog.Info("On retrieving was received documents", "documents_count", len(documents))
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			refs := parseReferences(documents)
+			for _, ch := range refsChans {
+				ch <- refs
+			}
+		}
+	}
+}
+
+func (s *VectorStorage) setupRetriever(callbackHandler ...*callback.Handler) *vectorstores.Retriever {
 	const op = "VectorStorage.setupRetriever"
 	slog.DebugContext(context.Background(), "Configuring retriever",
 		"num_results", s.cfg.NumOfResults)
