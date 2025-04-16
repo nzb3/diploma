@@ -173,19 +173,11 @@ func (s *VectorStorage) GetAnswerStream(ctx context.Context, question string, re
 	const op = "VectorStorage.GetAnswerStream"
 	slog.DebugContext(ctx, "Starting answer streaming", "question", question)
 
-	result, err := s.ask(ctx, question, refsChan,
-		chains.WithStreamingFunc(
-			func(ctx context.Context, chunk []byte) error {
-				slog.Info("Received chunk", "chunk", string(chunk), "length", len(chunk))
-				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				default:
-					chunkChan <- chunk
-					return nil
-				}
-			},
-		),
+	result, err := s.ask(
+		ctx,
+		question,
+		refsChan,
+		chains.WithStreamingFunc(newChunkHandler(chunkChan)),
 	)
 
 	if err != nil {
@@ -198,6 +190,19 @@ func (s *VectorStorage) GetAnswerStream(ctx context.Context, question string, re
 
 	slog.InfoContext(ctx, "Answer stream completed", "chunks_sent", len(result.Answer))
 	return result, err
+}
+
+func newChunkHandler(chunkChan chan<- []byte) func(ctx context.Context, chunk []byte) error {
+	return func(ctx context.Context, chunk []byte) error {
+		slog.Info("Received chunk", "chunk", string(chunk), "length", len(chunk))
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+			chunkChan <- chunk
+			return nil
+		}
+	}
 }
 
 func (s *VectorStorage) ask(ctx context.Context, question string, refsChan chan<- []models.Reference, opts ...chains.ChainCallOption) (models.SearchResult, error) {
