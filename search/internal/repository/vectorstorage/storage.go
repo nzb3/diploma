@@ -2,7 +2,6 @@ package vectorstorage
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -23,10 +22,6 @@ import (
 
 type Error error
 
-var (
-	UnsupportedResourceTypeError Error = errors.New("unsupported resource type")
-)
-
 type VectorStorage struct {
 	vectorStore vectorstores.VectorStore
 	generator   llms.Model
@@ -44,7 +39,7 @@ func NewVectorStorage(ctx context.Context, cfg *Config, embedder embeddings.Embe
 		pgvector.WithPreDeleteCollection(true),
 		pgvector.WithVectorDimensions(cfg.EmbeddingDimensions),
 		pgvector.WithEmbedder(embedder),
-		pgvector.WithConnectionURL("postgres://postgres:postgres@postgres:5432/postgres?sslmode=disable"),
+		pgvector.WithConnectionURL(cfg.PostgresURL),
 	)
 
 	if err != nil {
@@ -184,7 +179,8 @@ func (s *VectorStorage) GetAnswerStream(ctx context.Context, question string, re
 		slog.ErrorContext(ctx, "Streaming failed",
 			"op", op,
 			"question", question,
-			"error", err)
+			"error", err,
+		)
 		return models.SearchResult{}, fmt.Errorf("%s: %w", op, err)
 	}
 
@@ -208,6 +204,8 @@ func newChunkHandler(chunkChan chan<- []byte) func(ctx context.Context, chunk []
 func (s *VectorStorage) ask(ctx context.Context, question string, refsChan chan<- []models.Reference, opts ...chains.ChainCallOption) (models.SearchResult, error) {
 	const op = "VectorStorage.ask"
 	slog.DebugContext(ctx, "Processing question", "question", question)
+
+	internalRefsChan := make(chan []models.Reference, 1)
 
 	cb := callback.NewCallbackHandler(
 		callback.WithRetrieverEndFunc(newRetrieverEndHandler(refsChan, internalRefsChan)),
@@ -251,7 +249,8 @@ func (s *VectorStorage) ask(ctx context.Context, question string, refsChan chan<
 		return models.SearchResult{}, fmt.Errorf("%s: %w", op, err)
 	case answer := <-answerChan:
 		return models.SearchResult{
-			Answer: answer,
+			Answer:     answer,
+			References: <-internalRefsChan,
 		}, nil
 	}
 }
@@ -272,7 +271,6 @@ func newRetrieverEndHandler(refsChans ...chan<- []models.Reference) func(ctx con
 }
 
 func (s *VectorStorage) setupRetriever(callbackHandler ...*callback.Handler) *vectorstores.Retriever {
-	const op = "VectorStorage.setupRetriever"
 	slog.DebugContext(context.Background(), "Configuring retriever",
 		"num_results", s.cfg.NumOfResults)
 
@@ -280,11 +278,10 @@ func (s *VectorStorage) setupRetriever(callbackHandler ...*callback.Handler) *ve
 	if len(callbackHandler) > 0 {
 		retriever.CallbacksHandler = callbackHandler[0]
 	}
-	return retriever
+	return &retriever
 }
 
-func (s *VectorStorage) setupRetrievalQA(retriever vectorstores.Retriever) chains.RetrievalQA {
-	const op = "VectorStorage.setupRetrievalQA"
+func (s *VectorStorage) setupRetrievalQA(retriever *vectorstores.Retriever) chains.RetrievalQA {
 	slog.DebugContext(context.Background(), "Initializing QA chain")
 	return chains.NewRetrievalQAFromLLM(
 		s.generator,
