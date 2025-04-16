@@ -4,11 +4,9 @@ import { MainLayout } from '@layouts';
 import SearchPage from '@pages/Search';
 import ResourcesPage from '@pages/Resources';
 import '@/App.css'
-import {NotificationProvider} from "@/data/notification.context.tsx";
 
 function App() {
   return (
-      <NotificationProvider>
         <ChatProvider>
           <Router>
             <Routes>
@@ -19,7 +17,6 @@ function App() {
             </Routes>
           </Router>
         </ChatProvider>
-      </NotificationProvider>
   );
 }
 

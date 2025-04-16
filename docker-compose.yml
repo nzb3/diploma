@@ -38,7 +38,6 @@ services:
     networks:
       webservices:
         aliases:
-          - search.deltanotes.orb.local
           - search
     develop:
       watch:
