@@ -10,26 +10,25 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/nzb3/slogmanager"
 	"github.com/tmc/langchaingo/llms/ollama"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
-
-	"github.com/nzb3/slogmanager"
 
 	"github.com/nzb3/diploma/search/internal/controllers/resourcecontroller"
 	"github.com/nzb3/diploma/search/internal/controllers/searchcontroller"
 	"github.com/nzb3/diploma/search/internal/domain/services/resourceservcie"
 	"github.com/nzb3/diploma/search/internal/domain/services/searchservice"
+	"github.com/nzb3/diploma/search/internal/integration/embedder"
 	"github.com/nzb3/diploma/search/internal/integration/generator"
 	"github.com/nzb3/diploma/search/internal/integration/resourceprocessor"
 	"github.com/nzb3/diploma/search/internal/repository/gormpg"
 	"github.com/nzb3/diploma/search/internal/repository/vectorstorage"
 	"github.com/nzb3/diploma/search/internal/server"
-
-	"github.com/nzb3/diploma/search/internal/integration/embedder"
 )
 
-type serviceProvider struct {
+// ServiceProvider implementation of DI-container haves method to initialize components of application
+type ServiceProvider struct {
 	slogManager         *slogmanager.Manager
 	embeddingLLM        *ollama.LLM
 	generationLLM       *ollama.LLM
@@ -50,22 +49,25 @@ type serviceProvider struct {
 	resourceProcessor   *resourceprocessor.ResourceProcessor
 }
 
-func NewServiceProvider() *serviceProvider {
-	return &serviceProvider{}
+// NewServiceProvider creates and returns a new instance of ServiceProvider
+func NewServiceProvider() *ServiceProvider {
+	return &ServiceProvider{}
 }
 
-func (sp *serviceProvider) Logger(ctx context.Context) *slogmanager.Manager {
+// Logger returns the application's slog manager, creating it if it doesn't exist
+func (sp *ServiceProvider) Logger(ctx context.Context) *slogmanager.Manager {
 	if sp.slogManager != nil {
 		return sp.slogManager
 	}
+	_ = ctx
 	manager := slogmanager.New()
 	manager.AddWriter("stdout", slogmanager.NewWriter(os.Stdout, slogmanager.WithTextFormat()))
-
 	slog.SetLogLoggerLevel(slog.LevelDebug)
 	return sp.slogManager
 }
 
-func (sp *serviceProvider) EmbeddingLLM(ctx context.Context) *ollama.LLM {
+// EmbeddingLLM returns the LLM instance for embeddings, creating it if it doesn't exist
+func (sp *ServiceProvider) EmbeddingLLM(ctx context.Context) *ollama.LLM {
 	if sp.embeddingLLM != nil {
 		return sp.embeddingLLM
 	}
@@ -75,7 +77,7 @@ func (sp *serviceProvider) EmbeddingLLM(ctx context.Context) *ollama.LLM {
 		ollama.WithModel("mxbai-embed-large"),
 	)
 	if err != nil {
-		sp.Logger(ctx).Logger().Error("error creating ollama embedding LLM", err)
+		sp.Logger(ctx).Logger().Error("error creating ollama embedding LLM", "error", err.Error())
 		panic(fmt.Errorf("error creating ollama embedding LLM: %w", err))
 	}
 
@@ -84,18 +86,17 @@ func (sp *serviceProvider) EmbeddingLLM(ctx context.Context) *ollama.LLM {
 	return llm
 }
 
-func (sp *serviceProvider) GeneratingLLM(ctx context.Context) *ollama.LLM {
+// GeneratingLLM returns the LLM instance for text generation, creating it if it doesn't exist
+func (sp *ServiceProvider) GeneratingLLM(ctx context.Context) *ollama.LLM {
 	if sp.generationLLM != nil {
 		return sp.generationLLM
 	}
 
-	llm, err := ollama.New(
-		ollama.WithServerURL("http://ollama-generator:11434/"),
+	llm, err := ollama.New(ollama.WithServerURL("http://ollama-generator:11434/"),
 		ollama.WithModel("llama3"),
 	)
-
 	if err != nil {
-		sp.Logger(ctx).Logger().Error("error creating ollama generating LLM", err)
+		sp.Logger(ctx).Logger().Error("error creating ollama generating LLM", "error", err.Error())
 		panic(fmt.Errorf("error creating ollama generating LLM: %w", err))
 	}
 
@@ -103,14 +104,15 @@ func (sp *serviceProvider) GeneratingLLM(ctx context.Context) *ollama.LLM {
 	return llm
 }
 
-func (sp *serviceProvider) Embedder(ctx context.Context) *embedder.Embedder {
+// Embedder returns the embedder service instance, creating it if it doesn't exist
+func (sp *ServiceProvider) Embedder(ctx context.Context) *embedder.Embedder {
 	if sp.embedder != nil {
 		return sp.embedder
 	}
 
 	e, err := embedder.NewEmbedder(sp.EmbeddingLLM(ctx))
 	if err != nil {
-		sp.Logger(ctx).Logger().Error("error creating embedding LLM", err)
+		sp.Logger(ctx).Logger().Error("error creating embedding LLM", "error", err.Error())
 		panic(fmt.Errorf("error creating embedding LLM: %w", err))
 	}
 
@@ -119,14 +121,15 @@ func (sp *serviceProvider) Embedder(ctx context.Context) *embedder.Embedder {
 	return e
 }
 
-func (sp *serviceProvider) Generator(ctx context.Context) *generator.Generator {
+// Generator returns the text generator service instance, creating it if it doesn't exist
+func (sp *ServiceProvider) Generator(ctx context.Context) *generator.Generator {
 	if sp.generator != nil {
 		return sp.generator
 	}
 
 	g, err := generator.NewGenerator(sp.GeneratingLLM(ctx))
 	if err != nil {
-		sp.Logger(ctx).Logger().Error("error creating generating LLM", err)
+		sp.Logger(ctx).Logger().Error("error creating generating LLM", "error", err.Error())
 		panic(fmt.Errorf("error creating generating LLM: %w", err))
 	}
 
@@ -135,16 +138,25 @@ func (sp *serviceProvider) Generator(ctx context.Context) *generator.Generator {
 	return g
 }
 
-func (sp *serviceProvider) GinEngine(ctx context.Context) *gin.Engine {
+// GinEngine returns the configured Gin web engine instance, creating it if it doesn't exist
+func (sp *ServiceProvider) GinEngine(ctx context.Context) *gin.Engine {
 	if sp.ginEngine != nil {
 		return sp.ginEngine
 	}
-
+	_ = ctx
 	engine := gin.Default()
 
 	// Configure CORS to allow frontend requests
 	corsConfig := cors.Config{
-		AllowOrigins:     []string{"http://localhost:5173", "http://localhost:5174", "http://localhost:5175", "http://localhost", "http://localhost:80", "http://front", "http://front:80"},
+		AllowOrigins: []string{
+			"http://localhost:5173",
+			"http://localhost:5174",
+			"http://localhost:5175",
+			"http://localhost",
+			"http://localhost:80",
+			"http://front",
+			"http://front:80",
+		},
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length", "Content-Type"},
@@ -160,14 +172,15 @@ func (sp *serviceProvider) GinEngine(ctx context.Context) *gin.Engine {
 	return engine
 }
 
-func (sp *serviceProvider) VectorStorageConfig(ctx context.Context) *vectorstorage.Config {
+// VectorStorageConfig returns the vector storage configuration, creating it if it doesn't exist
+func (sp *ServiceProvider) VectorStorageConfig(ctx context.Context) *vectorstorage.Config {
 	if sp.vectorStorageConfig != nil {
 		return sp.vectorStorageConfig
 	}
 
 	config, err := vectorstorage.NewConfig(sp.RepositoryConfig(ctx).DSN)
 	if err != nil {
-		sp.Logger(ctx).Logger().Error("error creating vector storage config", err)
+		sp.Logger(ctx).Logger().Error("error creating vector storage config", "error", err.Error())
 		panic(fmt.Errorf("error creating vector storage config: %w", err))
 	}
 
@@ -176,14 +189,21 @@ func (sp *serviceProvider) VectorStorageConfig(ctx context.Context) *vectorstora
 	return config
 }
 
-func (sp *serviceProvider) VectorStore(ctx context.Context) *vectorstorage.VectorStorage {
+// VectorStore returns the vector storage instance, creating it if it doesn't exist
+func (sp *ServiceProvider) VectorStore(ctx context.Context) *vectorstorage.VectorStorage {
 	if sp.vectorStore != nil {
 		return sp.vectorStore
 	}
 
-	vectorStore, err := vectorstorage.NewVectorStorage(ctx, sp.VectorStorageConfig(ctx), sp.Embedder(ctx), sp.Generator(ctx))
+	vectorStore, err := vectorstorage.NewVectorStorage(
+		ctx,
+		sp.VectorStorageConfig(ctx),
+		sp.Embedder(ctx),
+		sp.Generator(ctx),
+	)
+
 	if err != nil {
-		sp.Logger(ctx).Logger().Error("error creating vector storage", err)
+		sp.Logger(ctx).Logger().Error("error creating vector storage", "error", err.Error())
 		panic(fmt.Errorf("error creating vector storage: %w", err))
 	}
 
@@ -192,14 +212,15 @@ func (sp *serviceProvider) VectorStore(ctx context.Context) *vectorstorage.Vecto
 	return vectorStore
 }
 
-func (sp *serviceProvider) RepositoryConfig(ctx context.Context) *gormpg.Config {
+// RepositoryConfig returns the repository configuration, creating it if it doesn't exist
+func (sp *ServiceProvider) RepositoryConfig(ctx context.Context) *gormpg.Config {
 	if sp.repositoryConfig != nil {
 		return sp.repositoryConfig
 	}
 
 	config, err := gormpg.NewConfig()
 	if err != nil {
-		sp.Logger(ctx).Logger().Error("error creating repository config", err)
+		sp.Logger(ctx).Logger().Error("error creating repository config", "error", err.Error())
 		panic(fmt.Errorf("error creating repository config: %w", err))
 	}
 
@@ -208,14 +229,15 @@ func (sp *serviceProvider) RepositoryConfig(ctx context.Context) *gormpg.Config 
 	return config
 }
 
-func (sp *serviceProvider) GormDB(ctx context.Context) *gorm.DB {
+// GormDB returns the GORM database instance, creating it if it doesn't exist
+func (sp *ServiceProvider) GormDB(ctx context.Context) *gorm.DB {
 	if sp.gormDB != nil {
 		return sp.gormDB
 	}
 
 	db, err := gorm.Open(postgres.Open(sp.RepositoryConfig(ctx).DSN))
 	if err != nil {
-		sp.Logger(ctx).Logger().Error("error creating gorm db", err)
+		sp.Logger(ctx).Logger().Error("error creating gorm db", "error", err.Error())
 		panic(fmt.Errorf("error creating gorm db: %w", err))
 	}
 
@@ -224,14 +246,15 @@ func (sp *serviceProvider) GormDB(ctx context.Context) *gorm.DB {
 	return db
 }
 
-func (sp *serviceProvider) Repository(ctx context.Context) *gormpg.Repository {
+// Repository returns the GORM repository instance, creating it if it doesn't exist
+func (sp *ServiceProvider) Repository(ctx context.Context) *gormpg.Repository {
 	if sp.repository != nil {
 		return sp.repository
 	}
 
 	repository, err := gormpg.NewRepository(sp.GormDB(ctx))
 	if err != nil {
-		sp.Logger(ctx).Logger().Error("error creating repository", err)
+		sp.Logger(ctx).Logger().Error("error creating repository", "error", err.Error())
 		panic(fmt.Errorf("error creating repository: %w", err))
 	}
 
@@ -240,7 +263,8 @@ func (sp *serviceProvider) Repository(ctx context.Context) *gormpg.Repository {
 	return repository
 }
 
-func (sp *serviceProvider) ResourceProcessor(ctx context.Context) *resourceprocessor.ResourceProcessor {
+// ResourceProcessor returns the resource processor instance, creating it if it doesn't exist
+func (sp *ServiceProvider) ResourceProcessor(ctx context.Context) *resourceprocessor.ResourceProcessor {
 	if sp.resourceProcessor != nil {
 		return sp.resourceProcessor
 	}
@@ -252,7 +276,8 @@ func (sp *serviceProvider) ResourceProcessor(ctx context.Context) *resourceproce
 	return resourceProcessor
 }
 
-func (sp *serviceProvider) ResourceService(ctx context.Context) *resourceservcie.Service {
+// ResourceService returns the resource service instance, creating it if it doesn't exist
+func (sp *ServiceProvider) ResourceService(ctx context.Context) *resourceservcie.Service {
 	if sp.resourceService != nil {
 		return sp.resourceService
 	}
@@ -264,7 +289,8 @@ func (sp *serviceProvider) ResourceService(ctx context.Context) *resourceservcie
 	return service
 }
 
-func (sp *serviceProvider) SearchController(ctx context.Context) *searchcontroller.Controller {
+// SearchController returns the search controller instance, creating it if it doesn't exist
+func (sp *ServiceProvider) SearchController(ctx context.Context) *searchcontroller.Controller {
 	if sp.searchController != nil {
 		return sp.searchController
 	}
@@ -276,7 +302,8 @@ func (sp *serviceProvider) SearchController(ctx context.Context) *searchcontroll
 	return controller
 }
 
-func (sp *serviceProvider) SearchService(ctx context.Context) *searchservice.Service {
+// SearchService returns the search service instance, creating it if it doesn't exist
+func (sp *ServiceProvider) SearchService(ctx context.Context) *searchservice.Service {
 	if sp.searchService != nil {
 		return sp.searchService
 	}
@@ -288,7 +315,8 @@ func (sp *serviceProvider) SearchService(ctx context.Context) *searchservice.Ser
 	return service
 }
 
-func (sp *serviceProvider) ResourceController(ctx context.Context) *resourcecontroller.Controller {
+// ResourceController returns the resource controller instance, creating it if it doesn't exist
+func (sp *ServiceProvider) ResourceController(ctx context.Context) *resourcecontroller.Controller {
 	if sp.resourceController != nil {
 		return sp.resourceController
 	}
@@ -300,14 +328,15 @@ func (sp *serviceProvider) ResourceController(ctx context.Context) *resourcecont
 	return controller
 }
 
-func (sp *serviceProvider) ServerConfig(ctx context.Context) *server.Config {
+// ServerConfig returns the server configuration, creating it if it doesn't exist
+func (sp *ServiceProvider) ServerConfig(ctx context.Context) *server.Config {
 	if sp.serverConfig != nil {
 		return sp.serverConfig
 	}
 
 	config, err := server.NewConfig()
 	if err != nil {
-		sp.Logger(ctx).Logger().Error("error creating server config", err)
+		sp.Logger(ctx).Logger().Error("error creating server config", "error", err.Error())
 		panic(fmt.Errorf("error creating server config: %w", err))
 	}
 
@@ -315,7 +344,8 @@ func (sp *serviceProvider) ServerConfig(ctx context.Context) *server.Config {
 	return config
 }
 
-func (sp *serviceProvider) Server(ctx context.Context) *http.Server {
+// Server returns the HTTP server instance, creating it if it doesn't exist
+func (sp *ServiceProvider) Server(ctx context.Context) *http.Server {
 	if sp.server != nil {
 		return sp.server
 	}

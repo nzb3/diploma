@@ -2,7 +2,9 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 
 	"github.com/nzb3/closer"
@@ -11,11 +13,13 @@ import (
 	"github.com/nzb3/diploma/search/internal/configurator"
 )
 
+// App is a structure that configure and run application
 type App struct {
-	serviceProvider *serviceProvider
+	serviceProvider *ServiceProvider
 	server          *http.Server
 }
 
+// NewApp creates exemplar of App
 func NewApp(ctx context.Context) (*App, error) {
 	a := &App{}
 	if err := a.initDeps(ctx); err != nil {
@@ -24,7 +28,9 @@ func NewApp(ctx context.Context) (*App, error) {
 	return a, nil
 }
 
+// Start starts the App
 func (a *App) Start(ctx context.Context) error {
+	const op = "app.Start"
 	defer func() {
 		closer.CloseAll()
 		closer.Wait()
@@ -34,10 +40,13 @@ func (a *App) Start(ctx context.Context) error {
 
 	eg.Go(func() error {
 		slog.Info("Starting server")
+		a.server.BaseContext = func(_ net.Listener) context.Context {
+			return ctx
+		}
 		return a.server.ListenAndServe()
 	})
 
-	return eg.Wait()
+	return fmt.Errorf("%s: %w", op, eg.Wait())
 }
 
 func (a *App) initDeps(ctx context.Context) error {
@@ -56,15 +65,16 @@ func (a *App) initDeps(ctx context.Context) error {
 	return nil
 }
 
-func (a *App) initConfig(ctx context.Context) error {
+func (a *App) initConfig(_ context.Context) error {
+	const op = "app.initConfig"
 	err := configurator.LoadConfig("configs", ".env", "env")
 	if err != nil {
-		return err
+		return fmt.Errorf("%s: %w", op, err)
 	}
 	return nil
 }
 
-func (a *App) initServiceProvider(ctx context.Context) error {
+func (a *App) initServiceProvider(_ context.Context) error {
 	a.serviceProvider = NewServiceProvider()
 	return nil
 }
