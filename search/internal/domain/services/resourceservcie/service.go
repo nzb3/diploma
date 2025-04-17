@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -128,10 +129,7 @@ func (s *Service) SaveResource(ctx context.Context, resource models.Resource, st
 			"op", op,
 			"error", err,
 		)
-		cleanupErr := s.cleanupProcess(ctx, resource.ID)
-		if cleanupErr != nil {
-			return models.Resource{}, fmt.Errorf("%s: %w", op, errors.Join(err, cleanupErr))
-		}
+
 		return models.Resource{}, fmt.Errorf("%s: %w", op, err)
 	}
 
@@ -174,37 +172,52 @@ func (s *Service) cleanupProcess(ctx context.Context, resourceID uuid.UUID) erro
 func (s *Service) runSaveResourcePipeline(ctx context.Context, resource models.Resource, statusUpdateCh chan<- models.ResourceStatusUpdate) (models.Resource, error) {
 	const op = "Service.runSaveResourcePipeline"
 
-	resource, err := s.saveResource(ctx, resource)
+	resource, err := s.saveResource(ctx, resource, statusUpdateCh)
 	if err != nil {
 		slog.ErrorContext(ctx, "Failed to save resource",
 			"op", op,
 			"error", err,
 		)
-		resource.UpdateStatus(models.ResourceStatusFailed, statusUpdateCh)
+
+		_, updateStatusErr := s.UpdateResourceStatus(ctx, resource, models.ResourceStatusFailed, statusUpdateCh)
+		if updateStatusErr != nil {
+			return models.Resource{}, fmt.Errorf("%s: %w", op, errors.Join(err, updateStatusErr))
+		}
+
 		return models.Resource{}, fmt.Errorf("%s: %w", op, err)
 	}
 
-	resource.UpdateStatus(models.ResourceStatusProcessing, statusUpdateCh)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
+	go func() {
+		defer cancel()
 
-	resourceID := resource.ID
+		resourceID := resource.ID
 
-	resource, err = s.processResource(ctx, resource)
-	if err != nil {
-		slog.ErrorContext(ctx, "Failed to process resource",
-			"op", op,
-			"resource_id", resourceID,
-			"error", err,
-		)
-		resource.UpdateStatus(models.ResourceStatusFailed, statusUpdateCh)
-		return models.Resource{}, fmt.Errorf("%s: %w", op, err)
-	}
+		resource, err = s.processResource(ctx, resource, statusUpdateCh)
+		if err != nil {
+			slog.ErrorContext(ctx, "Failed to process resource",
+				"op", op,
+				"resource_id", resourceID,
+				"error", err,
+			)
 
-	resource.UpdateStatus(models.ResourceStatusCompleted, statusUpdateCh)
+			_, updateStatusErr := s.UpdateResourceStatus(ctx, resource, models.ResourceStatusFailed, statusUpdateCh)
+			if updateStatusErr != nil {
+				slog.ErrorContext(ctx, "Failed to update resource",
+					"op", op,
+					"resource_id", resourceID,
+					"error", err,
+				)
+				return
+			}
+			return
+		}
+	}()
 
 	return resource, nil
 }
 
-func (s *Service) processResource(ctx context.Context, resource models.Resource) (models.Resource, error) {
+func (s *Service) processResource(ctx context.Context, resource models.Resource, statusUpdateCh chan<- models.ResourceStatusUpdate) (models.Resource, error) {
 	const op = "Service.processResource"
 	slog.DebugContext(ctx, "Processing resource",
 		"resource_id", resource.ID,
@@ -236,11 +249,21 @@ func (s *Service) processResource(ctx context.Context, resource models.Resource)
 		slog.InfoContext(ctx, "Successfully processed resource",
 			"resource_id", resource.ID,
 		)
+
+		resource, err = s.UpdateResourceStatus(ctx, resource, models.ResourceStatusCompleted, statusUpdateCh)
+		if err != nil {
+			slog.ErrorContext(ctx, "Failed to update resource",
+				"op", op,
+				"resource_id", resource.ID,
+				"error", err,
+			)
+		}
+
 		return resource, nil
 	}
 }
 
-func (s *Service) saveResource(ctx context.Context, resource models.Resource) (models.Resource, error) {
+func (s *Service) saveResource(ctx context.Context, resource models.Resource, statusUpdateCh chan<- models.ResourceStatusUpdate) (models.Resource, error) {
 	const op = "Service.saveResource"
 	slog.DebugContext(ctx, "Saving resource to repository",
 		"resource_type", resource.Type)
@@ -273,8 +296,47 @@ func (s *Service) saveResource(ctx context.Context, resource models.Resource) (m
 			return models.Resource{}, err
 		}
 
+		resource, err = s.UpdateResourceStatus(ctx, *savedResource, models.ResourceStatusProcessing, statusUpdateCh)
+		if err != nil {
+			slog.ErrorContext(ctx, "Failed to update resource",
+				"op", op,
+				"resource_id", resource.ID,
+				"error", err,
+			)
+		}
+
 		slog.DebugContext(ctx, "Resource saved successfully",
 			"resource_id", savedResource.ID)
-		return *savedResource, nil
+		return resource, nil
 	}
+}
+
+func (s *Service) UpdateResourceStatus(
+	ctx context.Context,
+	resource models.Resource,
+	status models.ResourceStatus,
+	updateCh ...chan<- models.ResourceStatusUpdate,
+) (models.Resource, error) {
+	const op = "Service.UpdateResourceStatus"
+
+	resource.Status = status
+
+	resource, err := s.UpdateResource(ctx, resource)
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to update resource",
+			"error", err,
+		)
+		return models.Resource{}, fmt.Errorf("%s: %w", op, err)
+	}
+
+	if len(updateCh) > 0 {
+		for _, u := range updateCh {
+			u <- models.ResourceStatusUpdate{
+				ResourceID: resource.ID,
+				Status:     resource.Status,
+			}
+		}
+	}
+
+	return resource, nil
 }

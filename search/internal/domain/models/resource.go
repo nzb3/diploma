@@ -1,7 +1,6 @@
 package models
 
 import (
-	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -9,11 +8,10 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type ResourceType string
-
-const ()
 
 type ResourceEvent struct {
 	ID     uuid.UUID      `json:"id"`
@@ -43,18 +41,6 @@ func (r *Resource) SetStatusProcessing() {
 
 func (r *Resource) SetStatusCompleted() {
 	r.Status = ResourceStatusCompleted
-}
-
-func (r *Resource) UpdateStatus(status ResourceStatus, updateCh ...chan<- ResourceStatusUpdate) {
-	r.Status = status
-	if len(updateCh) > 0 {
-		for _, u := range updateCh {
-			u <- ResourceStatusUpdate{
-				ResourceID: r.ID,
-				Status:     r.Status,
-			}
-		}
-	}
 }
 
 func (r *Resource) Validate() error {
@@ -122,26 +108,19 @@ func (r *Resource) BeforeUpdate(tx *gorm.DB) error {
 
 	r.UpdatedAt = time.Now()
 	return tx.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("resource_id = ?", r.ID).Delete(&ResourceEmbedding{}).Error; err != nil {
-			return fmt.Errorf("%s: %w", op, err)
-		}
+		if len(r.ChunkIDs) != 0 {
+			associations := make([]ResourceEmbedding, 0, len(r.ChunkIDs))
+			for _, chunkID := range r.ChunkIDs {
+				associations = append(associations, ResourceEmbedding{
+					ResourceID:  r.ID,
+					EmbeddingID: uuid.MustParse(chunkID),
+				})
+			}
 
-		if len(r.ChunkIDs) == 0 {
-			return fmt.Errorf("%s: %w", op, errors.New("no chunk ids to associate"))
+			if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&associations).Error; err != nil {
+				return fmt.Errorf("%s: %w", op, err)
+			}
 		}
-
-		associations := make([]ResourceEmbedding, 0, len(r.ChunkIDs))
-		for _, chunkID := range r.ChunkIDs {
-			associations = append(associations, ResourceEmbedding{
-				ResourceID:  r.ID,
-				EmbeddingID: uuid.MustParse(chunkID),
-			})
-		}
-
-		if err := tx.Create(&associations).Error; err != nil {
-			return fmt.Errorf("%s: %w", op, err)
-		}
-
 		return nil
 	})
 }

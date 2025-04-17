@@ -128,7 +128,10 @@ func (r *Repository) UpdateResource(ctx context.Context, resource models.Resourc
 	const op = "Repository.UpdateResource"
 	slog.DebugContext(ctx, "Updating resource in database",
 		"resource_id", resource.ID)
-
+	if resource.ID == uuid.Nil {
+		return nil, fmt.Errorf("%s: resource ID is empty", op)
+	}
+	
 	err := r.db.WithContext(ctx).Save(&resource).Error
 	if err != nil {
 		slog.ErrorContext(ctx, "Failed to update resource",
