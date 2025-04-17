@@ -144,12 +144,12 @@ func (s *VectorStorage) SemanticSearch(ctx context.Context, query string) ([]mod
 	return parseReferences(docs), nil
 }
 
-func (s *VectorStorage) GetAnswer(ctx context.Context, question string, refsChan chan<- []models.Reference) (models.SearchResult, error) {
+func (s *VectorStorage) GetAnswer(ctx context.Context, question string, refsCh chan<- []models.Reference) (models.SearchResult, error) {
 	const op = "storage.GetAnswer"
 	slog.DebugContext(ctx, "Getting answer",
 		"question", question)
 
-	result, err := s.ask(ctx, question, refsChan)
+	result, err := s.ask(ctx, question, refsCh)
 	if err != nil {
 		slog.ErrorContext(ctx, "Failed to get answer",
 			"op", op,
@@ -164,15 +164,15 @@ func (s *VectorStorage) GetAnswer(ctx context.Context, question string, refsChan
 	return result, nil
 }
 
-func (s *VectorStorage) GetAnswerStream(ctx context.Context, question string, refsChan chan<- []models.Reference, chunkChan chan<- []byte) (models.SearchResult, error) {
+func (s *VectorStorage) GetAnswerStream(ctx context.Context, question string, refsCh chan<- []models.Reference, chunkCh chan<- []byte) (models.SearchResult, error) {
 	const op = "VectorStorage.GetAnswerStream"
 	slog.DebugContext(ctx, "Starting answer streaming", "question", question)
 
 	result, err := s.ask(
 		ctx,
 		question,
-		refsChan,
-		chains.WithStreamingFunc(newChunkHandler(chunkChan)),
+		refsCh,
+		chains.WithStreamingFunc(newChunkHandler(chunkCh)),
 	)
 
 	if err != nil {
@@ -188,44 +188,44 @@ func (s *VectorStorage) GetAnswerStream(ctx context.Context, question string, re
 	return result, err
 }
 
-func newChunkHandler(chunkChan chan<- []byte) func(ctx context.Context, chunk []byte) error {
+func newChunkHandler(chunkCh chan<- []byte) func(ctx context.Context, chunk []byte) error {
 	return func(ctx context.Context, chunk []byte) error {
 		slog.Info("Received chunk", "chunk", string(chunk), "length", len(chunk))
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		default:
-			chunkChan <- chunk
+			chunkCh <- chunk
 			return nil
 		}
 	}
 }
 
-func (s *VectorStorage) ask(ctx context.Context, question string, refsChan chan<- []models.Reference, opts ...chains.ChainCallOption) (models.SearchResult, error) {
+func (s *VectorStorage) ask(ctx context.Context, question string, refsCh chan<- []models.Reference, opts ...chains.ChainCallOption) (models.SearchResult, error) {
 	const op = "VectorStorage.ask"
 	slog.DebugContext(ctx, "Processing question", "question", question)
 
-	internalRefsChan := make(chan []models.Reference, 1)
+	internalRefsCh := make(chan []models.Reference, 1)
 
 	cb := callback.NewCallbackHandler(
-		callback.WithRetrieverEndFunc(newRetrieverEndHandler(refsChan, internalRefsChan)),
+		callback.WithRetrieverEndFunc(newRetrieverEndHandler(refsCh, internalRefsCh)),
 	)
 
 	retriever := s.setupRetriever(cb)
 	retrievalQAChain := s.setupRetrievalQA(retriever)
 	opts = append(opts, chains.WithMaxTokens(s.cfg.MaxTokens), chains.WithCallback(cb))
 
-	answerChan := make(chan string)
-	errChan := make(chan error)
+	answerCh := make(chan string)
+	errCh := make(chan error)
 
 	go func() {
 		defer func() {
-			close(answerChan)
-			close(errChan)
+			close(answerCh)
+			close(errCh)
 		}()
 		select {
 		case <-ctx.Done():
-			errChan <- ctx.Err()
+			errCh <- ctx.Err()
 		default:
 			slog.DebugContext(ctx, "Running retrieval QA chain")
 			answer, err := chains.Run(
@@ -235,22 +235,22 @@ func (s *VectorStorage) ask(ctx context.Context, question string, refsChan chan<
 				opts...,
 			)
 			if err != nil {
-				errChan <- err
+				errCh <- err
 			}
 
-			answerChan <- answer
+			answerCh <- answer
 		}
 	}()
 
 	select {
 	case <-ctx.Done():
 		return models.SearchResult{}, ctx.Err()
-	case err := <-errChan:
+	case err := <-errCh:
 		return models.SearchResult{}, fmt.Errorf("%s: %w", op, err)
-	case answer := <-answerChan:
+	case answer := <-answerCh:
 		return models.SearchResult{
 			Answer:     answer,
-			References: <-internalRefsChan,
+			References: <-internalRefsCh,
 		}, nil
 	}
 }

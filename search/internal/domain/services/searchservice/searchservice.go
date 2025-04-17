@@ -11,8 +11,8 @@ import (
 )
 
 type vectorStorage interface {
-	GetAnswer(ctx context.Context, question string, refsChan chan<- []models.Reference) (models.SearchResult, error)
-	GetAnswerStream(ctx context.Context, question string, refsChan chan<- []models.Reference, chunkChan chan<- []byte) (models.SearchResult, error)
+	GetAnswer(ctx context.Context, question string, refsCh chan<- []models.Reference) (models.SearchResult, error)
+	GetAnswerStream(ctx context.Context, question string, refsCh chan<- []models.Reference, chunkCh chan<- []byte) (models.SearchResult, error)
 	SemanticSearch(ctx context.Context, query string) ([]models.Reference, error)
 }
 
@@ -35,20 +35,20 @@ func NewService(vs vectorStorage, r repository) *Service {
 func (ss *Service) GetAnswerStream(
 	ctx context.Context,
 	question string,
-	referencesChan chan<- []models.Reference,
-	chunkChan chan<- []byte,
+	referencesCh chan<- []models.Reference,
+	chunkCh chan<- []byte,
 ) (models.SearchResult, error) {
 	const op = "Service.GetAnswerStream"
 
 	rawRefs := make(chan []models.Reference, 1)
 
-	errChan := make(chan error, 1)
+	errCh := make(chan error, 1)
 
 	go func() {
 		select {
 		case <-ctx.Done():
 			slog.Debug("Context cancelled")
-			errChan <- ctx.Err()
+			errCh <- ctx.Err()
 			return
 		case refs := <-rawRefs:
 			processedRefs, err := ss.provideReferencesWithResourceID(ctx, refs)
@@ -56,7 +56,7 @@ func (ss *Service) GetAnswerStream(
 				slog.Error("Error processing references", "err", err)
 				return
 			}
-			referencesChan <- processedRefs
+			referencesCh <- processedRefs
 		}
 	}()
 
@@ -64,10 +64,10 @@ func (ss *Service) GetAnswerStream(
 	case <-ctx.Done():
 		slog.Debug("Context cancelled")
 		return models.SearchResult{}, ctx.Err()
-	case err := <-errChan:
+	case err := <-errCh:
 		return models.SearchResult{}, fmt.Errorf("%s: %w", op, err)
 	default:
-		result, err := ss.vectorStorage.GetAnswerStream(ctx, question, rawRefs, chunkChan)
+		result, err := ss.vectorStorage.GetAnswerStream(ctx, question, rawRefs, chunkCh)
 		if err != nil {
 			slog.Error("Error getting answer stream", "err", err)
 			return models.SearchResult{}, fmt.Errorf("%s: %w", op, err)
@@ -83,7 +83,7 @@ func (ss *Service) GetAnswerStream(
 	}
 }
 
-func (ss *Service) GetAnswer(ctx context.Context, question string, refsChan chan<- []models.Reference) (models.SearchResult, error) {
+func (ss *Service) GetAnswer(ctx context.Context, question string, refsCh chan<- []models.Reference) (models.SearchResult, error) {
 	const op = "Service.GetAnswer"
 	slog.InfoContext(ctx, "Getting answer",
 		"question", question)
@@ -91,7 +91,7 @@ func (ss *Service) GetAnswer(ctx context.Context, question string, refsChan chan
 	case <-ctx.Done():
 		return models.SearchResult{}, ctx.Err()
 	default:
-		result, err := ss.vectorStorage.GetAnswer(ctx, question, refsChan)
+		result, err := ss.vectorStorage.GetAnswer(ctx, question, refsCh)
 		if err != nil {
 			slog.ErrorContext(ctx, "Failed to get answer from vector storage",
 				"op", op,

@@ -450,9 +450,9 @@ func TestService_SaveResource(t *testing.T) {
 			service := NewService(repoMock, procMock)
 
 			// Create a status update channel
-			statusChan := make(chan models.ResourceStatusUpdate, 3)
+			statusCh := make(chan models.ResourceStatusUpdate, 3)
 
-			resource, err := service.SaveResource(context.Background(), tt.resource, statusChan)
+			resource, err := service.SaveResource(context.Background(), tt.resource, statusCh)
 
 			if tt.expectError {
 				assert.Error(t, err)
@@ -462,7 +462,7 @@ func TestService_SaveResource(t *testing.T) {
 
 				// Check status channel
 				select {
-				case update := <-statusChan:
+				case update := <-statusCh:
 					assert.Equal(t, resource.ID, update.ResourceID)
 				default:
 					t.Fatal("Expected status update in channel")

@@ -18,8 +18,8 @@ import (
 )
 
 type searchService interface {
-	GetAnswer(ctx context.Context, question string, refsChan chan<- []models.Reference) (models.SearchResult, error)
-	GetAnswerStream(ctx context.Context, question string, referencesChan chan<- []models.Reference, chunkChan chan<- []byte) (models.SearchResult, error)
+	GetAnswer(ctx context.Context, question string, refsCh chan<- []models.Reference) (models.SearchResult, error)
+	GetAnswerStream(ctx context.Context, question string, referencesCh chan<- []models.Reference, chunkCh chan<- []byte) (models.SearchResult, error)
 	SemanticSearch(ctx context.Context, query string) ([]models.Reference, error)
 }
 
@@ -76,21 +76,21 @@ func (c *Controller) Ask() gin.HandlerFunc {
 			return
 		}
 
-		refsChan := make(chan []models.Reference, 1)
+		refsCh := make(chan []models.Reference, 1)
 		go func() {
-			defer close(refsChan)
+			defer close(refsCh)
 
 			ctx.Stream(func(w io.Writer) bool {
 				select {
 				case <-ctx.Done():
 					return false
-				case refs := <-refsChan:
+				case refs := <-refsCh:
 					return c.handleReferences(ctx, processID, refs)
 				}
 			})
 		}()
 		slog.Debug("Processing question", "question", req.Question)
-		answer, err := c.searchService.GetAnswer(ctx, req.Question, refsChan)
+		answer, err := c.searchService.GetAnswer(ctx, req.Question, refsCh)
 
 		if err != nil {
 			slog.Error("Error getting answer", "error", err, "question", req.Question)
@@ -124,33 +124,35 @@ func (c *Controller) AskStream() gin.HandlerFunc {
 			"process_id", processID,
 			"question", question,
 			"client", ctx.ClientIP())
-		chunkChan := make(chan []byte, 1)
-		referencesChan := make(chan []models.Reference, 1)
-		resultChan := make(chan models.SearchResult, 1)
-		errChan := make(chan error, 1)
+		chunkCh := make(chan []byte, 1)
+		referencesCh := make(chan []models.Reference, 1)
+		resultCh := make(chan models.SearchResult, 1)
+		errCh := make(chan error, 1)
 		go func() {
 			defer func() {
-				close(referencesChan)
-				close(chunkChan)
+				close(referencesCh)
+				close(chunkCh)
+				close(resultCh)
+				close(errCh)
 			}()
 
-			result, err := c.searchService.GetAnswerStream(ctx, question, referencesChan, chunkChan)
+			result, err := c.searchService.GetAnswerStream(ctx, question, referencesCh, chunkCh)
 			if err != nil {
-				errChan <- err
+				errCh <- err
 			}
 
-			resultChan <- result
+			resultCh <- result
 		}()
 
 		ctx.Stream(func(w io.Writer) bool {
 			select {
-			case chunk := <-chunkChan:
+			case chunk := <-chunkCh:
 				return c.handleChunk(ctx, processID, chunk)
-			case references := <-referencesChan:
+			case references := <-referencesCh:
 				return c.handleReferences(ctx, processID, references)
-			case result := <-resultChan:
+			case result := <-resultCh:
 				return c.handleResult(ctx, processID, result)
-			case err := <-errChan:
+			case err := <-errCh:
 				return c.handleError(ctx, processID, err)
 			case <-ctx.Done():
 				return c.handleCancellationEvent(ctx, processID, ctx.Err())

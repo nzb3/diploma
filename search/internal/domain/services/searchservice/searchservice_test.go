@@ -18,13 +18,13 @@ type mockVectorStorage struct {
 	mock.Mock
 }
 
-func (m *mockVectorStorage) GetAnswer(ctx context.Context, question string, refsChan chan<- []models.Reference) (models.SearchResult, error) {
-	args := m.Called(ctx, question, refsChan)
+func (m *mockVectorStorage) GetAnswer(ctx context.Context, question string, refsCh chan<- []models.Reference) (models.SearchResult, error) {
+	args := m.Called(ctx, question, refsCh)
 	return args.Get(0).(models.SearchResult), args.Error(1)
 }
 
-func (m *mockVectorStorage) GetAnswerStream(ctx context.Context, question string, refsChan chan<- []models.Reference, chunkChan chan<- []byte) (models.SearchResult, error) {
-	args := m.Called(ctx, question, refsChan, chunkChan)
+func (m *mockVectorStorage) GetAnswerStream(ctx context.Context, question string, refsCh chan<- []models.Reference, chunkCh chan<- []byte) (models.SearchResult, error) {
+	args := m.Called(ctx, question, refsCh, chunkCh)
 	return args.Get(0).(models.SearchResult), args.Error(1)
 }
 
@@ -76,18 +76,18 @@ func TestService_GetAnswerStream(t *testing.T) {
 				// Setup repository to return resource IDs for references
 				resourceID1 := uuid.New()
 				resourceID2 := uuid.New()
-				
+
 				repo.On("GetResourceIDByReference", mock.Anything, refs[0]).Return(resourceID1, nil)
 				repo.On("GetResourceIDByReference", mock.Anything, refs[1]).Return(resourceID2, nil)
 
 				// When vector storage's GetAnswerStream is called, it should:
-				// 1. Send references to the refsChan
+				// 1. Send references to the refsCh
 				// 2. Return the result
 				vs.On("GetAnswerStream", mock.Anything, "What is the meaning of life?", mock.Anything, mock.Anything).
 					Run(func(args mock.Arguments) {
-						refsChan := args.Get(2).(chan<- []models.Reference)
+						refsCh := args.Get(2).(chan<- []models.Reference)
 						// Send references to channel
-						refsChan <- refs
+						refsCh <- refs
 					}).
 					Return(result, nil)
 			},
@@ -132,9 +132,9 @@ func TestService_GetAnswerStream(t *testing.T) {
 
 				vs.On("GetAnswerStream", mock.Anything, "Repository error", mock.Anything, mock.Anything).
 					Run(func(args mock.Arguments) {
-						refsChan := args.Get(2).(chan<- []models.Reference)
+						refsCh := args.Get(2).(chan<- []models.Reference)
 						// Send references to channel
-						refsChan <- refs
+						refsCh <- refs
 					}).
 					Return(result, nil)
 			},
@@ -164,8 +164,8 @@ func TestService_GetAnswerStream(t *testing.T) {
 			service := NewService(mockVS, mockRepo)
 
 			// Create channels
-			refsChan := make(chan []models.Reference, 1)
-			chunkChan := make(chan []byte, 10)
+			refsCh := make(chan []models.Reference, 1)
+			chunkCh := make(chan []byte, 10)
 
 			// Create context
 			ctx, cancel := context.WithCancel(context.Background())
@@ -179,7 +179,7 @@ func TestService_GetAnswerStream(t *testing.T) {
 			}
 
 			// Call the method
-			result, err := service.GetAnswerStream(ctx, tc.question, refsChan, chunkChan)
+			result, err := service.GetAnswerStream(ctx, tc.question, refsCh, chunkCh)
 
 			// Check results
 			if tc.expectedErr != "" {
@@ -188,7 +188,7 @@ func TestService_GetAnswerStream(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 				assert.Equal(t, tc.expectedResult.Answer, result.Answer)
-				
+
 				// References might have UUIDs added, so we don't directly compare them
 				if len(tc.expectedResult.References) > 0 {
 					assert.Equal(t, len(tc.expectedResult.References), len(result.References))

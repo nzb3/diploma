@@ -119,10 +119,10 @@ func (s *Service) UpdateResource(ctx context.Context, resource models.Resource) 
 	return *updatedResource, nil
 }
 
-func (s *Service) SaveResource(ctx context.Context, resource models.Resource, statusUpdateChan chan<- models.ResourceStatusUpdate) (models.Resource, error) {
+func (s *Service) SaveResource(ctx context.Context, resource models.Resource, statusUpdateCh chan<- models.ResourceStatusUpdate) (models.Resource, error) {
 	const op = "Service.SaveResource"
 
-	resource, err := s.runSaveResourcePipeline(ctx, resource, statusUpdateChan)
+	resource, err := s.runSaveResourcePipeline(ctx, resource, statusUpdateCh)
 	if err != nil {
 		slog.ErrorContext(ctx, "Failed to save resource",
 			"op", op,
@@ -171,7 +171,7 @@ func (s *Service) cleanupProcess(ctx context.Context, resourceID uuid.UUID) erro
 	return nil
 }
 
-func (s *Service) runSaveResourcePipeline(ctx context.Context, resource models.Resource, statusUpdateChan chan<- models.ResourceStatusUpdate) (models.Resource, error) {
+func (s *Service) runSaveResourcePipeline(ctx context.Context, resource models.Resource, statusUpdateCh chan<- models.ResourceStatusUpdate) (models.Resource, error) {
 	const op = "Service.runSaveResourcePipeline"
 
 	resource, err := s.saveResource(ctx, resource)
@@ -180,11 +180,11 @@ func (s *Service) runSaveResourcePipeline(ctx context.Context, resource models.R
 			"op", op,
 			"error", err,
 		)
-		resource.UpdateStatus(models.ResourceStatusFailed, statusUpdateChan)
+		resource.UpdateStatus(models.ResourceStatusFailed, statusUpdateCh)
 		return models.Resource{}, fmt.Errorf("%s: %w", op, err)
 	}
 
-	resource.UpdateStatus(models.ResourceStatusProcessing, statusUpdateChan)
+	resource.UpdateStatus(models.ResourceStatusProcessing, statusUpdateCh)
 
 	resourceID := resource.ID
 
@@ -195,11 +195,11 @@ func (s *Service) runSaveResourcePipeline(ctx context.Context, resource models.R
 			"resource_id", resourceID,
 			"error", err,
 		)
-		resource.UpdateStatus(models.ResourceStatusFailed, statusUpdateChan)
+		resource.UpdateStatus(models.ResourceStatusFailed, statusUpdateCh)
 		return models.Resource{}, fmt.Errorf("%s: %w", op, err)
 	}
 
-	resource.UpdateStatus(models.ResourceStatusCompleted, statusUpdateChan)
+	resource.UpdateStatus(models.ResourceStatusCompleted, statusUpdateCh)
 
 	return resource, nil
 }
