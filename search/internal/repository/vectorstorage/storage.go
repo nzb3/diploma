@@ -36,7 +36,7 @@ func NewVectorStorage(ctx context.Context, cfg *Config, embedder embeddings.Embe
 		ctx,
 		pgvector.WithCollectionTableName("collections"),
 		pgvector.WithEmbeddingTableName("embeddings"),
-		pgvector.WithPreDeleteCollection(true),
+		pgvector.WithPreDeleteCollection(false),
 		pgvector.WithVectorDimensions(cfg.EmbeddingDimensions),
 		pgvector.WithEmbedder(embedder),
 		pgvector.WithConnectionURL(cfg.PostgresURL),
