@@ -18,8 +18,8 @@ import (
 )
 
 type searchService interface {
-	GetAnswer(ctx context.Context, question string, refsCh chan<- []models.Reference) (models.SearchResult, error)
-	GetAnswerStream(ctx context.Context, question string, referencesCh chan<- []models.Reference, chunkCh chan<- []byte) (models.SearchResult, error)
+	GetAnswer(ctx context.Context, question string) (models.SearchResult, error)
+	GetAnswerStream(ctx context.Context, question string) (<-chan models.SearchResult, <-chan []models.Reference, <-chan []byte, <-chan error)
 	SemanticSearch(ctx context.Context, query string) ([]models.Reference, error)
 }
 
@@ -69,28 +69,9 @@ func (c *Controller) Ask() gin.HandlerFunc {
 			ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		processID, err := getProcessIDFromContext(ctx)
-		if err != nil {
-			slog.Error("Error getting process ID check createProcessMiddleware", "error", err)
-			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "failed to start process"})
-			return
-		}
 
-		refsCh := make(chan []models.Reference, 1)
-		go func() {
-			defer close(refsCh)
-
-			ctx.Stream(func(w io.Writer) bool {
-				select {
-				case <-ctx.Done():
-					return false
-				case refs := <-refsCh:
-					return c.handleReferences(ctx, processID, refs)
-				}
-			})
-		}()
 		slog.Debug("Processing question", "question", req.Question)
-		answer, err := c.searchService.GetAnswer(ctx, req.Question, refsCh)
+		searchResult, err := c.searchService.GetAnswer(ctx, req.Question)
 
 		if err != nil {
 			slog.Error("Error getting answer", "error", err, "question", req.Question)
@@ -99,7 +80,7 @@ func (c *Controller) Ask() gin.HandlerFunc {
 		}
 
 		slog.Info("Successfully processed request", "question", req.Question)
-		ctx.JSON(http.StatusOK, AskResponse{Result: answer})
+		ctx.JSON(http.StatusOK, AskResponse{Result: searchResult})
 	}
 }
 
@@ -124,25 +105,8 @@ func (c *Controller) AskStream() gin.HandlerFunc {
 			"process_id", processID,
 			"question", question,
 			"client", ctx.ClientIP())
-		chunkCh := make(chan []byte, 1)
-		referencesCh := make(chan []models.Reference, 1)
-		resultCh := make(chan models.SearchResult, 1)
-		errCh := make(chan error, 1)
-		go func() {
-			defer func() {
-				close(referencesCh)
-				close(chunkCh)
-				close(resultCh)
-				close(errCh)
-			}()
 
-			result, err := c.searchService.GetAnswerStream(ctx, question, referencesCh, chunkCh)
-			if err != nil {
-				errCh <- err
-			}
-
-			resultCh <- result
-		}()
+		resultCh, referencesCh, chunkCh, errCh := c.searchService.GetAnswerStream(ctx, question)
 
 		ctx.Stream(func(w io.Writer) bool {
 			select {

@@ -11,8 +11,8 @@ import (
 )
 
 type vectorStorage interface {
-	GetAnswer(ctx context.Context, question string, refsCh chan<- []models.Reference) (models.SearchResult, error)
-	GetAnswerStream(ctx context.Context, question string, refsCh chan<- []models.Reference, chunkCh chan<- []byte) (models.SearchResult, error)
+	GetAnswer(ctx context.Context, question string) (string, []models.Reference, error)
+	GetAnswerStream(ctx context.Context, question string) (<-chan string, <-chan []models.Reference, <-chan []byte, <-chan error)
 	SemanticSearch(ctx context.Context, query string) ([]models.Reference, error)
 }
 
@@ -32,90 +32,89 @@ func NewService(vs vectorStorage, r repository) *Service {
 	return &Service{vectorStorage: vs, repository: r}
 }
 
-func (ss *Service) GetAnswerStream(
-	ctx context.Context,
-	question string,
-	referencesCh chan<- []models.Reference,
-	chunkCh chan<- []byte,
-) (models.SearchResult, error) {
+func (s *Service) GetAnswerStream(ctx context.Context, question string) (
+	<-chan models.SearchResult,
+	<-chan []models.Reference,
+	<-chan []byte,
+	<-chan error,
+) {
 	const op = "Service.GetAnswerStream"
 
-	rawRefs := make(chan []models.Reference, 1)
+	errOutputCh := make(chan error, 1)
+	refsOutputCh := make(chan []models.Reference)
+	searchResultOutputCh := make(chan models.SearchResult)
 
-	errCh := make(chan error, 1)
-
+	answerCh, rawRefsCh, chunkCh, getAnswerErrCh := s.vectorStorage.GetAnswerStream(ctx, question)
 	go func() {
-		select {
-		case <-ctx.Done():
-			slog.Debug("Context cancelled")
-			errCh <- ctx.Err()
-			return
-		case refs := <-rawRefs:
-			processedRefs, err := ss.provideReferencesWithResourceID(ctx, refs)
-			if err != nil {
-				slog.Error("Error processing references", "err", err)
+		defer func() {
+			close(refsOutputCh)
+			close(errOutputCh)
+			close(searchResultOutputCh)
+		}()
+
+		processedRefsCh := make(chan []models.Reference, 1)
+		defer close(processedRefsCh)
+
+		for {
+			select {
+			case refs := <-rawRefsCh:
+				processedRefs, err := s.processReferences(ctx, refs)
+				if err != nil {
+					slog.Error("Error processing references", "err", err)
+					errOutputCh <- fmt.Errorf("%s: %w", op, err)
+					return
+				}
+				processedRefsCh <- processedRefs
+				refsOutputCh <- processedRefs
+			case <-ctx.Done():
+				slog.Debug("Context cancelled")
+				errOutputCh <- ctx.Err()
+				return
+			case err := <-getAnswerErrCh:
+				slog.Error("Error getting answer stream", "err", err)
+				errOutputCh <- fmt.Errorf("%s: %w", op, err)
+				return
+			case answer := <-answerCh:
+				slog.Info("Processing answer", "question", question)
+
+				searchResult := models.SearchResult{
+					Answer:     answer,
+					References: <-processedRefsCh,
+				}
+
+				searchResultOutputCh <- searchResult
 				return
 			}
-			referencesCh <- processedRefs
 		}
 	}()
 
-	select {
-	case <-ctx.Done():
-		slog.Debug("Context cancelled")
-		return models.SearchResult{}, ctx.Err()
-	case err := <-errCh:
-		return models.SearchResult{}, fmt.Errorf("%s: %w", op, err)
-	default:
-		result, err := ss.vectorStorage.GetAnswerStream(ctx, question, rawRefs, chunkCh)
-		if err != nil {
-			slog.Error("Error getting answer stream", "err", err)
-			return models.SearchResult{}, fmt.Errorf("%s: %w", op, err)
-		}
-
-		processedResult, err := ss.processResult(ctx, result)
-		if err != nil {
-			slog.Error("Error processing result", "err", err)
-			return models.SearchResult{}, fmt.Errorf("%s: %w", op, err)
-		}
-
-		return processedResult, nil
-	}
+	return searchResultOutputCh, refsOutputCh, chunkCh, errOutputCh
 }
 
-func (ss *Service) GetAnswer(ctx context.Context, question string, refsCh chan<- []models.Reference) (models.SearchResult, error) {
+func (s *Service) GetAnswer(ctx context.Context, question string) (models.SearchResult, error) {
 	const op = "Service.GetAnswer"
 	slog.InfoContext(ctx, "Getting answer",
 		"question", question)
-	select {
-	case <-ctx.Done():
-		return models.SearchResult{}, ctx.Err()
-	default:
-		result, err := ss.vectorStorage.GetAnswer(ctx, question, refsCh)
-		if err != nil {
-			slog.ErrorContext(ctx, "Failed to get answer from vector storage",
-				"op", op,
-				"error", err)
-			return models.SearchResult{}, fmt.Errorf("%s: %w", op, err)
-		}
 
-		slog.DebugContext(ctx, "Processing answer result",
-			"references_count", len(result.References))
-		result, err = ss.processResult(ctx, result)
-		if err != nil {
-			slog.ErrorContext(ctx, "Failed to process result",
-				"op", op,
-				"error", err)
-			return models.SearchResult{}, fmt.Errorf("%s: %w", op, err)
-		}
-
-		slog.InfoContext(ctx, "Successfully retrieved answer",
-			"references_count", len(result.References))
-		return result, nil
+	answer, rawRefs, err := s.vectorStorage.GetAnswer(ctx, question)
+	if err != nil {
+		slog.Error("Error getting answer", "err", err)
+		return models.SearchResult{}, fmt.Errorf("%s: %w", op, err)
 	}
+
+	processedRefs, err := s.processReferences(ctx, rawRefs)
+	if err != nil {
+		slog.Error("Error processing references", "err", err)
+		return models.SearchResult{}, fmt.Errorf("%s: %w", op, err)
+	}
+
+	return models.SearchResult{
+		Answer:     answer,
+		References: processedRefs,
+	}, nil
 }
 
-func (ss *Service) SemanticSearch(ctx context.Context, query string) ([]models.Reference, error) {
+func (s *Service) SemanticSearch(ctx context.Context, query string) ([]models.Reference, error) {
 	const op = "Service.SemanticSearch"
 	slog.InfoContext(ctx, "Performing semantic search",
 		"query", query)
@@ -123,7 +122,7 @@ func (ss *Service) SemanticSearch(ctx context.Context, query string) ([]models.R
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	default:
-		references, err := ss.vectorStorage.SemanticSearch(ctx, query)
+		references, err := s.vectorStorage.SemanticSearch(ctx, query)
 		if err != nil {
 			slog.ErrorContext(ctx, "Failed to perform semantic search",
 				"op", op,
@@ -133,7 +132,7 @@ func (ss *Service) SemanticSearch(ctx context.Context, query string) ([]models.R
 
 		slog.DebugContext(ctx, "Adding resource IDs to references",
 			"references_count", len(references))
-		references, err = ss.provideReferencesWithResourceID(ctx, references)
+		references, err = s.processReferences(ctx, references)
 		if err != nil {
 			slog.ErrorContext(ctx, "Failed to provide references with resource IDs",
 				"op", op,
@@ -147,7 +146,7 @@ func (ss *Service) SemanticSearch(ctx context.Context, query string) ([]models.R
 	}
 }
 
-func (ss *Service) processResult(ctx context.Context, result models.SearchResult) (models.SearchResult, error) {
+func (s *Service) processResult(ctx context.Context, result models.SearchResult) (models.SearchResult, error) {
 	const op = "Service.processResult"
 	slog.DebugContext(ctx, "Processing search result",
 		"references_count", len(result.References))
@@ -155,7 +154,7 @@ func (ss *Service) processResult(ctx context.Context, result models.SearchResult
 	case <-ctx.Done():
 		return models.SearchResult{}, ctx.Err()
 	default:
-		refs, err := ss.provideReferencesWithResourceID(ctx, result.References)
+		refs, err := s.processReferences(ctx, result.References)
 		if err != nil {
 			slog.ErrorContext(ctx, "Failed to provide references with resource IDs",
 				"op", op,
@@ -169,8 +168,8 @@ func (ss *Service) processResult(ctx context.Context, result models.SearchResult
 	}
 }
 
-func (ss *Service) provideReferencesWithResourceID(ctx context.Context, refs []models.Reference) ([]models.Reference, error) {
-	const op = "Service.provideReferencesWithResourceID"
+func (s *Service) processReferences(ctx context.Context, refs []models.Reference) ([]models.Reference, error) {
+	const op = "Service.processReferences"
 	slog.DebugContext(ctx, "Adding resource IDs to references",
 		"references_count", len(refs))
 
@@ -183,7 +182,7 @@ func (ss *Service) provideReferencesWithResourceID(ctx context.Context, refs []m
 				"reference_index", i,
 				"content_length", len(ref.Content))
 
-			resID, err := ss.repository.GetResourceIDByReference(ctx, ref)
+			resID, err := s.repository.GetResourceIDByReference(ctx, ref)
 			if err != nil {
 				slog.ErrorContext(ctx, "Failed to get resource ID for reference",
 					"op", op,

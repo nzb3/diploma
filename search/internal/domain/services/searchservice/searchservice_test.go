@@ -23,9 +23,9 @@ func (m *mockVectorStorage) GetAnswer(ctx context.Context, question string, refs
 	return args.Get(0).(models.SearchResult), args.Error(1)
 }
 
-func (m *mockVectorStorage) GetAnswerStream(ctx context.Context, question string, refsCh chan<- []models.Reference, chunkCh chan<- []byte) (models.SearchResult, error) {
+func (m *mockVectorStorage) GetAnswerStream(ctx context.Context, question string) (<-chan models.SearchResult, <-chan []models.Reference, <-chan []byte, <-chan error) {
 	args := m.Called(ctx, question, refsCh, chunkCh)
-	return args.Get(0).(models.SearchResult), args.Error(1)
+	return nil, nil, nil, args.Error(1)
 }
 
 func (m *mockVectorStorage) SemanticSearch(ctx context.Context, query string) ([]models.Reference, error) {
@@ -139,7 +139,7 @@ func TestService_GetAnswerStream(t *testing.T) {
 					Return(result, nil)
 			},
 			expectedResult: models.SearchResult{},
-			expectedErr:    "Service.processResult: Service.provideReferencesWithResourceID: repository error",
+			expectedErr:    "Service.processResult: Service.processReferences: repository error",
 		},
 		{
 			name:          "Context cancellation",
@@ -179,7 +179,7 @@ func TestService_GetAnswerStream(t *testing.T) {
 			}
 
 			// Call the method
-			result, err := service.GetAnswerStream(ctx, tc.question, refsCh, chunkCh)
+			_, _, _, err := service.GetAnswerStream(ctx, tc.question)
 
 			// Check results
 			if tc.expectedErr != "" {
