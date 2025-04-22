@@ -23,8 +23,8 @@ func NewConfig() (*Config, error) {
 			Port:              "8080",
 			ReadTimeout:       5 * time.Second,
 			ReadHeaderTimeout: 2 * time.Second,
-			WriteTimeout:      50 * time.Second,
-			IdleTimeout:       30 * time.Second,
+			WriteTimeout:      500 * time.Second,
+			IdleTimeout:       300 * time.Second,
 			MaxHeaderBytes:    1 << 20,
 		},
 	}, nil
