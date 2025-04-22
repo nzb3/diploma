@@ -216,7 +216,7 @@ func newChunkHandler(chunkCh chan<- []byte) func(ctx context.Context, chunk []by
 	}
 }
 
-func (s *VectorStorage) ask(ctx context.Context, question string, opts ...chains.ChainCallOption) (<-chan string, <-chan []models.Reference, chan error, <-chan struct{}) {
+func (s *VectorStorage) ask(ctx context.Context, question string, opts ...chains.ChainCallOption) (<-chan string, <-chan []models.Reference, <-chan error, <-chan struct{}) {
 	const op = "VectorStorage.ask"
 	slog.DebugContext(ctx, "Processing question", "question", question)
 
