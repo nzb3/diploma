@@ -93,7 +93,7 @@ func (sp *ServiceProvider) GeneratingLLM(ctx context.Context) *ollama.LLM {
 	}
 
 	llm, err := ollama.New(ollama.WithServerURL("http://ollama-generator:11434/"),
-		ollama.WithModel("llama3"),
+		ollama.WithModel("gemma3:1b"),
 	)
 	if err != nil {
 		sp.Logger(ctx).Logger().Error("error creating ollama generating LLM", "error", err.Error())

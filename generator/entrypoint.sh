@@ -3,8 +3,9 @@
 ollama serve &
 sleep 5
 # Pull the desired model
-echo "Pulling all-minilm model..."
-ollama pull llama3
+echo "Pulling model..."
+ollama pull gemma3:1b
+
 
 # Keep the container running
 wait
