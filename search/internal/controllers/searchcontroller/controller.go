@@ -155,7 +155,8 @@ func (c *Controller) createProcessMiddleware() gin.HandlerFunc {
 
 		slog.Debug("Created new process context",
 			"process_id", processID,
-			"active_requests", c.activeRequestsCount())
+			"active_requests", c.activeRequestsCount(),
+		)
 
 		ctx.Next()
 	}
@@ -191,7 +192,7 @@ func (c *Controller) handleChunk(ctx *gin.Context, processID uuid.UUID, chunk []
 }
 
 func (c *Controller) handleResult(ctx *gin.Context, processID uuid.UUID, result models.SearchResult) bool {
-	slog.Info("Finalizing stream processing", "process_id", processID, "result", result)
+	slog.Info("Finalizing stream processing", "process_id", processID)
 
 	controllers.SendSSEEvent(ctx, "complete", gin.H{
 		"process_id": processID.String(),
@@ -199,7 +200,7 @@ func (c *Controller) handleResult(ctx *gin.Context, processID uuid.UUID, result 
 		"complete":   true,
 	})
 
-	slog.Debug("Sent final result", "process_id", processID, "result", result)
+	slog.Debug("Sent final result", "process_id", processID)
 	return false
 }
 
