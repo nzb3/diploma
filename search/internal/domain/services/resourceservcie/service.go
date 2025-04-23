@@ -9,11 +9,14 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/nzb3/diploma/search/internal/controllers/middleware"
 	"github.com/nzb3/diploma/search/internal/domain/models"
 )
 
 type resourceRepository interface {
+	ResourceOwnedByUser(ctx context.Context, resourceID uuid.UUID, userID string) (bool, error)
 	GetResources(ctx context.Context) ([]models.Resource, error)
+	GetResourcesByOwnerID(ctx context.Context, ownerID string) ([]models.Resource, error)
 	GetResourceByID(ctx context.Context, resourceID uuid.UUID) (*models.Resource, error)
 	SaveResource(ctx context.Context, resource models.Resource) (*models.Resource, error)
 	UpdateResource(ctx context.Context, resource models.Resource) (*models.Resource, error)
@@ -39,11 +42,31 @@ func NewService(rr resourceRepository, rp resourceProcessor) *Service {
 	}
 }
 
+// getUserID attempts to get the authenticated user ID from context
+// If not found, returns an error
+func getUserID(ctx context.Context) (string, error) {
+	userID, ok := middleware.GetUserID(ctx)
+	if !ok {
+		return "", errors.New("user not authenticated")
+	}
+	return userID, nil
+}
+
 func (s *Service) GetResources(ctx context.Context) ([]models.Resource, error) {
 	const op = "Service.GetResources"
 	slog.DebugContext(ctx, "Fetching resources list")
 
-	resources, err := s.resourceRepo.GetResources(ctx)
+	userID, err := getUserID(ctx)
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to get user ID",
+			"op", op,
+			"error", err)
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+
+	slog.InfoContext(ctx, "Fetching resources for user", "user_id", userID)
+
+	resources, err := s.resourceRepo.GetResourcesByOwnerID(ctx, userID)
 	if err != nil {
 		slog.ErrorContext(ctx, "Failed to retrieve resources",
 			"op", op,
@@ -51,18 +74,35 @@ func (s *Service) GetResources(ctx context.Context) ([]models.Resource, error) {
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
-	slog.InfoContext(ctx, "Successfully fetched resources",
-		"count", len(resources))
 	return resources, nil
 }
 
 func (s *Service) DeleteResource(ctx context.Context, id uuid.UUID) error {
 	const op = "Service.DeleteResource"
+
+	userID, err := getUserID(ctx)
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to get user ID",
+			"op", op,
+			"error", err)
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
 	slog.DebugContext(ctx, "Processing delete request",
 		"resource_id", id,
+		"user_id", userID,
 	)
 
-	err := s.resourceRepo.DeleteResource(ctx, id)
+	err = s.checkOwnership(ctx, id, userID)
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to delete resource",
+			"op", op,
+			"error", err,
+		)
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	err = s.resourceRepo.DeleteResource(ctx, id)
 	if err != nil {
 		slog.ErrorContext(ctx, "Resource deletion failed",
 			"op", op,
@@ -72,14 +112,36 @@ func (s *Service) DeleteResource(ctx context.Context, id uuid.UUID) error {
 	}
 
 	slog.InfoContext(ctx, "Resource deleted successfully",
-		"resource_id", id)
+		"resource_id", id,
+		"user_id", userID)
 	return nil
 }
 
 func (s *Service) GetResourceByID(ctx context.Context, resourceID uuid.UUID) (models.Resource, error) {
 	const op = "Service.GetResourceByID"
+
+	userID, err := getUserID(ctx)
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to get user ID",
+			"op", op,
+			"error", err)
+		return models.Resource{}, fmt.Errorf("%s: %w", op, err)
+	}
+
+	err = s.checkOwnership(ctx, resourceID, userID)
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to delete resource",
+			"op", op,
+			"resource_id", resourceID,
+			"user_id", userID,
+			"error", err,
+		)
+		return models.Resource{}, fmt.Errorf("%s: %w", op, err)
+	}
+
 	slog.DebugContext(ctx, "Processing get request",
 		"resource_id", resourceID,
+		"user_id", userID,
 	)
 
 	resource, err := s.resourceRepo.GetResourceByID(ctx, resourceID)
@@ -94,6 +156,7 @@ func (s *Service) GetResourceByID(ctx context.Context, resourceID uuid.UUID) (mo
 
 	slog.InfoContext(ctx, "Successfully fetched resource",
 		"resource_id", resourceID,
+		"user_id", userID,
 	)
 	return *resource, nil
 }
@@ -103,6 +166,18 @@ func (s *Service) UpdateResource(ctx context.Context, resource models.Resource) 
 	slog.DebugContext(ctx, "Processing update request",
 		"resource_id", resource.ID,
 	)
+
+	err := s.checkOwnership(ctx, resource.ID, resource.OwnerID)
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to update resource",
+			"op", op,
+			"resource_id", resource.ID,
+			"user_id", resource.OwnerID,
+			"error", err,
+		)
+		return models.Resource{}, fmt.Errorf("%s: %w", op, err)
+	}
+
 	updatedResource, err := s.resourceRepo.UpdateResource(ctx, resource)
 	if err != nil {
 		slog.ErrorContext(ctx, "Failed to process resource",
@@ -123,11 +198,26 @@ func (s *Service) UpdateResource(ctx context.Context, resource models.Resource) 
 func (s *Service) SaveResource(ctx context.Context, resource models.Resource, statusUpdateCh chan<- models.ResourceStatusUpdate) (models.Resource, error) {
 	const op = "Service.SaveResource"
 
-	resource, err := s.runSaveResourcePipeline(ctx, resource, statusUpdateCh)
+	userID, err := getUserID(ctx)
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to get user ID",
+			"op", op,
+			"error", err)
+		return models.Resource{}, fmt.Errorf("%s: %w", op, err)
+	}
+
+	resource.OwnerID = userID
+
+	slog.InfoContext(ctx, "Saving resource for user",
+		"user_id", userID,
+		"resource_type", resource.Type)
+
+	resource, err = s.runSaveResourcePipeline(ctx, resource, statusUpdateCh)
 	if err != nil {
 		slog.ErrorContext(ctx, "Failed to save resource",
 			"op", op,
 			"error", err,
+			"user_id", userID,
 		)
 
 		return models.Resource{}, fmt.Errorf("%s: %w", op, err)
@@ -135,6 +225,7 @@ func (s *Service) SaveResource(ctx context.Context, resource models.Resource, st
 
 	slog.InfoContext(ctx, "Successfully saved resource",
 		"resource_id", resource.ID,
+		"user_id", userID,
 	)
 
 	return resource, nil
@@ -339,4 +430,24 @@ func (s *Service) UpdateResourceStatus(
 	}
 
 	return resource, nil
+}
+
+func (s *Service) checkOwnership(ctx context.Context, resourceID uuid.UUID, userID string) error {
+	const op = "Service.checkOwnership"
+	owned, err := s.resourceRepo.ResourceOwnedByUser(ctx, resourceID, userID)
+	if err != nil {
+		slog.Error("Failed to check ownership of resource",
+			"op", op,
+			"resource_id", resourceID,
+			"user_id", userID,
+			"error", err,
+		)
+		return err
+	}
+
+	if !owned {
+		return errors.New("user haven't owned resource")
+	}
+
+	return nil
 }

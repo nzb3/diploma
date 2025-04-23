@@ -9,17 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type Controller interface {
-	RegisterRoutes(router *gin.RouterGroup)
-}
-
-func NewServer(ctx context.Context, router *gin.Engine, cfg *Config, controllers ...Controller) *http.Server {
-	api := router.Group("/api")
-	v1 := api.Group("/v1")
-
-	for _, controller := range controllers {
-		controller.RegisterRoutes(v1)
-	}
+func NewServer(ctx context.Context, router *gin.Engine, cfg *Config) *http.Server {
 
 	s := &http.Server{
 		Addr:              ":" + cfg.HTTP.Port,

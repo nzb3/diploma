@@ -15,6 +15,8 @@ import (
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 
+	"github.com/nzb3/diploma/search/internal/controllers"
+	"github.com/nzb3/diploma/search/internal/controllers/middleware"
 	"github.com/nzb3/diploma/search/internal/controllers/resourcecontroller"
 	"github.com/nzb3/diploma/search/internal/controllers/searchcontroller"
 	"github.com/nzb3/diploma/search/internal/domain/services/resourceservcie"
@@ -47,6 +49,8 @@ type ServiceProvider struct {
 	searchController    *searchcontroller.Controller
 	searchService       *searchservice.Service
 	resourceProcessor   *resourceprocessor.ResourceProcessor
+	authConfig          *middleware.AuthMiddlewareConfig
+	authMiddleware      *middleware.AuthMiddleware
 }
 
 // NewServiceProvider creates and returns a new instance of ServiceProvider
@@ -138,6 +142,25 @@ func (sp *ServiceProvider) Generator(ctx context.Context) *generator.Generator {
 	return g
 }
 
+// AuthConfig returns the auth configuration, creating it if it doesn't exist
+func (sp *ServiceProvider) AuthConfig(ctx context.Context) *middleware.AuthMiddlewareConfig {
+	if sp.authConfig != nil {
+		return sp.authConfig
+	}
+
+	// Get values from environment or use defaults
+	// In production, these should be loaded from configuration files or environment variables
+	sp.authConfig = &middleware.AuthMiddlewareConfig{
+		Host:         "auth",
+		Port:         "8080",
+		Realm:        "deltanotes",
+		ClientID:     "deltanotes-backend",
+		ClientSecret: "jjNv3RHONkIPYA1rKblKWC1rEBe12UG4",
+	}
+
+	return sp.authConfig
+}
+
 // GinEngine returns the configured Gin web engine instance, creating it if it doesn't exist
 func (sp *ServiceProvider) GinEngine(ctx context.Context) *gin.Engine {
 	if sp.ginEngine != nil {
@@ -168,8 +191,41 @@ func (sp *ServiceProvider) GinEngine(ctx context.Context) *gin.Engine {
 	engine.Use(gin.Logger())
 	engine.Use(gin.Recovery())
 
+	engine = sp.setupRoutes(
+		ctx,
+		engine,
+		sp.ResourceController(ctx),
+		sp.SearchController(ctx),
+	)
+
 	sp.ginEngine = engine
 	return engine
+}
+
+func (sp *ServiceProvider) setupRoutes(ctx context.Context, router *gin.Engine, controllers ...controllers.Controller) *gin.Engine {
+	api := router.Group("/api")
+	v1 := api.Group("/v1")
+
+	v1.Use(sp.AuthMiddleware(ctx).Authenticate())
+
+	for _, controller := range controllers {
+		controller.RegisterRoutes(v1)
+	}
+
+	return router
+}
+
+func (sp *ServiceProvider) AuthMiddleware(ctx context.Context) *middleware.AuthMiddleware {
+	if sp.authMiddleware != nil {
+		return sp.authMiddleware
+	}
+
+	_ = ctx
+
+	authMiddleware := middleware.NewAuthMiddleware(sp.AuthConfig(ctx))
+
+	sp.authMiddleware = authMiddleware
+	return authMiddleware
 }
 
 // VectorStorageConfig returns the vector storage configuration, creating it if it doesn't exist
@@ -354,8 +410,6 @@ func (sp *ServiceProvider) Server(ctx context.Context) *http.Server {
 		ctx,
 		sp.GinEngine(ctx),
 		sp.ServerConfig(ctx),
-		sp.ResourceController(ctx),
-		sp.SearchController(ctx),
 	)
 
 	sp.server = s

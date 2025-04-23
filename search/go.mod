@@ -4,13 +4,16 @@ go 1.24.0
 
 require (
 	github.com/JohannesKaufmann/html-to-markdown/v2 v2.3.1
+	github.com/gen2brain/go-fitz v1.24.14
 	github.com/gin-contrib/cors v1.7.5
 	github.com/gin-gonic/gin v1.10.0
+	github.com/golang-jwt/jwt/v5 v5.2.2
 	github.com/google/uuid v1.6.0
 	github.com/nzb3/closer v1.0.0
 	github.com/nzb3/slogmanager v1.0.0
 	github.com/samber/lo v1.49.1
 	github.com/spf13/viper v1.20.1
+	github.com/stretchr/testify v1.10.0
 	github.com/tmc/langchaingo v0.1.13
 	golang.org/x/sync v0.12.0
 	gorm.io/driver/postgres v1.5.11
@@ -34,6 +37,7 @@ require (
 	github.com/Masterminds/goutils v1.1.1 // indirect
 	github.com/Masterminds/semver/v3 v3.3.1 // indirect
 	github.com/Masterminds/sprig/v3 v3.2.3 // indirect
+	github.com/Nerzal/gocloak/v13 v13.9.0 // indirect
 	github.com/OpenPeeDeeP/depguard/v2 v2.2.1 // indirect
 	github.com/PuerkitoBio/goquery v1.8.1 // indirect
 	github.com/alecthomas/go-check-sumtype v0.3.1 // indirect
@@ -84,13 +88,13 @@ require (
 	github.com/fsnotify/fsnotify v1.8.0 // indirect
 	github.com/fzipp/gocyclo v0.6.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.8 // indirect
-	github.com/gen2brain/go-fitz v1.24.14 // indirect
 	github.com/ghostiam/protogetter v0.3.12 // indirect
 	github.com/gin-contrib/sse v1.0.0 // indirect
 	github.com/go-critic/go-critic v0.13.0 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/go-playground/validator/v10 v10.26.0 // indirect
+	github.com/go-resty/resty/v2 v2.7.0 // indirect
 	github.com/go-toolsmith/astcast v1.1.0 // indirect
 	github.com/go-toolsmith/astcopy v1.1.0 // indirect
 	github.com/go-toolsmith/astequal v1.2.0 // indirect
@@ -181,6 +185,7 @@ require (
 	github.com/nishanths/predeclared v0.2.2 // indirect
 	github.com/nunnatsa/ginkgolinter v0.19.1 // indirect
 	github.com/olekukonko/tablewriter v0.0.5 // indirect
+	github.com/opentracing/opentracing-go v1.2.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.3 // indirect
 	github.com/pgvector/pgvector-go v0.1.1 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
@@ -208,6 +213,7 @@ require (
 	github.com/sashamelentyev/interfacebloat v1.1.0 // indirect
 	github.com/sashamelentyev/usestdlibvars v1.28.0 // indirect
 	github.com/securego/gosec/v2 v2.22.2 // indirect
+	github.com/segmentio/ksuid v1.0.4 // indirect
 	github.com/shopspring/decimal v1.2.0 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/sivchari/containedctx v1.0.3 // indirect
@@ -221,7 +227,6 @@ require (
 	github.com/ssgreg/nlreturn/v2 v2.2.1 // indirect
 	github.com/stbenjam/no-sprintf-host-port v0.2.0 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
-	github.com/stretchr/testify v1.10.0 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/tdakkota/asciicheck v0.4.1 // indirect
 	github.com/tetafro/godot v1.5.0 // indirect

@@ -12,24 +12,18 @@ import (
 	"github.com/nzb3/diploma/search/internal/domain/models"
 )
 
+// GetResources retrieves all resources from the database
 func (r *Repository) GetResources(ctx context.Context) ([]models.Resource, error) {
 	const op = "Repository.GetResources"
-	slog.DebugContext(ctx, "Fetching resources from database")
 
 	var resources []models.Resource
-	err := r.db.WithContext(ctx).Find(&resources).Error
-	if err != nil {
-		slog.ErrorContext(ctx, "Failed to fetch resources",
-			"op", op,
-			"error", err)
-		return nil, err
+	if err := r.db.WithContext(ctx).Find(&resources).Error; err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
 	}
-
-	slog.InfoContext(ctx, "Successfully fetched resources",
-		"count", len(resources))
 	return resources, nil
 }
 
+// GetResourceIDByReference retrieves resource by reference
 func (r *Repository) GetResourceIDByReference(ctx context.Context, reference models.Reference) (uuid.UUID, error) {
 	const op = "Repository.GetResourceIDByReference"
 	slog.DebugContext(ctx, "Fetching resource ID by reference",
@@ -74,93 +68,74 @@ func (r *Repository) GetResourceIDByReference(ctx context.Context, reference mod
 	return id, nil
 }
 
+// GetResourcesByOwnerID retrieves all resources belonging to a specific owner
+func (r *Repository) GetResourcesByOwnerID(ctx context.Context, ownerID string) ([]models.Resource, error) {
+	const op = "Repository.GetResourcesByOwnerID"
+
+	var resources []models.Resource
+	if err := r.db.WithContext(ctx).Where("owner_id = ?", ownerID).Find(&resources).Error; err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+	return resources, nil
+}
+
+// GetResourceByID retrieves a resource by its ID
 func (r *Repository) GetResourceByID(ctx context.Context, resourceID uuid.UUID) (*models.Resource, error) {
 	const op = "Repository.GetResourceByID"
+
 	var resource models.Resource
-
-	err := r.db.WithContext(ctx).
-		Model(&models.Resource{}).
-		First(&resource, "id = ?", resourceID.String()).
-		Error
-
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		slog.WarnContext(ctx, "Resource not found for reference",
-			"op", op,
-			"resource_id", resourceID,
-		)
-		return nil, fmt.Errorf("%s: resource not found for reference content: %s", op, resourceID.String())
+	if err := r.db.WithContext(ctx).Where("id = ?", resourceID).First(&resource).Error; err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
 	}
-
-	if err != nil {
-		slog.ErrorContext(ctx, "Failed to fetch resource ID",
-			"op", op,
-			"resource_id", resourceID,
-			"error", err,
-		)
-	}
-
-	slog.InfoContext(ctx, "Successfully fetched resource ID",
-		"resource_id", resourceID,
-	)
-
 	return &resource, nil
 }
 
+// SaveResource saves a new resource to the database
 func (r *Repository) SaveResource(ctx context.Context, resource models.Resource) (*models.Resource, error) {
 	const op = "Repository.SaveResource"
-	slog.DebugContext(ctx, "Saving resource to database")
 
-	err := r.db.WithContext(ctx).Create(&resource).Error
-	if err != nil {
-		slog.ErrorContext(ctx, "Failed to save resource",
-			"op", op,
-			"resource_type", resource.Type,
-			"error", err)
-		return nil, err
+	if err := r.db.WithContext(ctx).Create(&resource).Error; err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
 	}
-
-	slog.InfoContext(ctx, "Successfully saved resource",
-		"resource_id", resource.ID)
 	return &resource, nil
 }
 
+// UpdateResource updates an existing resource in the database
 func (r *Repository) UpdateResource(ctx context.Context, resource models.Resource) (*models.Resource, error) {
 	const op = "Repository.UpdateResource"
-	slog.DebugContext(ctx, "Updating resource in database",
-		"resource_id", resource.ID)
-	if resource.ID == uuid.Nil {
-		return nil, fmt.Errorf("%s: resource ID is empty", op)
-	}
-	
-	err := r.db.WithContext(ctx).Save(&resource).Error
-	if err != nil {
-		slog.ErrorContext(ctx, "Failed to update resource",
-			"op", op,
-			"resource_id", resource.ID,
-			"error", err)
-		return nil, err
-	}
 
-	slog.InfoContext(ctx, "Successfully updated resource",
-		"resource_id", resource.ID)
+	if err := r.db.WithContext(ctx).Save(&resource).Error; err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
 	return &resource, nil
 }
 
+// DeleteResource deletes a resource by its ID
 func (r *Repository) DeleteResource(ctx context.Context, id uuid.UUID) error {
 	const op = "Repository.DeleteResource"
-	slog.DebugContext(ctx, "Deleting resource from database",
-		"resource_id", id)
 
-	err := r.db.WithContext(ctx).Delete(&models.Resource{}, id).Error
+	var resource models.Resource
+	resource.ID = id
+
+	if err := r.db.WithContext(ctx).Delete(&resource).Error; err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+	return nil
+}
+
+func (r *Repository) ResourceOwnedByUser(ctx context.Context, resourceID uuid.UUID, userID string) (bool, error) {
+	const op = "Repository.ResourceOwnedByUser"
+
+	var count int64
+	err := r.db.WithContext(ctx).
+		Model(&models.Resource{}).
+		Where("id = ? AND (owner_id = ? OR owner_id IS NULL OR owner_id = '')", resourceID, userID).
+		Count(&count).
+		Error
+
 	if err != nil {
-		slog.ErrorContext(ctx, "Failed to delete resource",
-			"op", op,
-			"resource_id", id,
-			"error", err)
-		return err
+		return false, fmt.Errorf("%s: %w", op, err)
 	}
 
-	slog.InfoContext(ctx, "Successfully deleted resource",
-		"resource_id", id)
-	return nil
+	return count > 0, nil
 }

@@ -19,3 +19,7 @@ func SendSSEEvent(ctx *gin.Context, event string, data interface{}) {
 	ctx.SSEvent(event, data)
 	ctx.Writer.Flush()
 }
+
+type Controller interface {
+	RegisterRoutes(router *gin.RouterGroup)
+}

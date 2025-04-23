@@ -139,13 +139,12 @@ services:
       - ./.env
     environment:
       - POSTGRES_DB=${AUTH_DB_NAME}
-      - POSTGRES_USER=${SEARCH_DB_USER}
-      - POSTGRES_PASSWORD=${SEARCH_DB_PASSWORD}
-      - POSTGRES_DB=${SEARCH_DB_NAME}
+      - POSTGRES_USER=${AUTH_DB_USER}
+      - POSTGRES_PASSWORD=${AUTH_DB_PASSWORD}
     ports:
       - ${AUTH_DB_PORT}:5432
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}" ]
+      test: [ "CMD-SHELL", "pg_isready -U ${AUTH_DB_NAME} -d ${AUTH_DB_NAME}" ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -153,6 +152,14 @@ services:
       webservices:
         aliases:
           - auth_database
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    hostname: mailhog
+    restart: always
+    ports:
+      - 1025:1025  # SMTP port
+      - 8025:8025  # Web UI port
 
   search_database:
     image: pgvector/pgvector:pg17
@@ -170,7 +177,7 @@ services:
       - ./search_database/.data:/var/lib/postgresql/.data
       - ./search_database/scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}" ]
+      test: [ "CMD-SHELL", "pg_isready -U ${SEARCH_DB_USER} -d ${SEARCH_DB_NAME}" ]
       interval: 5s
       timeout: 5s
       retries: 5

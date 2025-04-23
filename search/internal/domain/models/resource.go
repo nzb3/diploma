@@ -27,6 +27,7 @@ type Resource struct {
 	RawContent       []byte         `gorm:"type:bytea" json:"raw_content"`
 	ChunkIDs         []string       `gorm:"-" json:"chunk_ids,omitempty"`
 	Status           ResourceStatus `gorm:"type:varchar(50)" json:"status,omitempty"`
+	OwnerID          string         `gorm:"type:varchar(100)" json:"owner_id,omitempty"`
 	CreatedAt        time.Time      `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt        time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
 }
