@@ -20,7 +20,7 @@ func NewConfig() (*Config, error) {
 	// TODO: load config from file
 	return &Config{
 		HTTP: HTTPConfig{
-			Port:              "8080",
+			Port:              "8081",
 			ReadTimeout:       5 * time.Second,
 			ReadHeaderTimeout: 2 * time.Second,
 			WriteTimeout:      500 * time.Second,

@@ -12,7 +12,7 @@ RUN apk add --no-cache libffi mupdf mupdf-dev
 COPY --from=builder-debug /app/server .
 COPY --from=builder-debug /app/configs/ ./configs
 COPY --from=builder-debug /go/bin/dlv .
-EXPOSE 8080 40000
+EXPOSE 8081 40000
 CMD ["./dlv", "--listen=:40000", "--headless=true", "--api-version=2", "--accept-multiclient", "exec", "./server"]
 
 # Release build stage
@@ -28,5 +28,5 @@ WORKDIR /app
 RUN apk add --no-cache libffi mupdf mupdf-dev
 COPY --from=builder-release /app/server .
 COPY --from=builder-release /app/configs/ ./configs
-EXPOSE 8080
+EXPOSE 8081
 CMD ["./server"]
