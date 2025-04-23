@@ -2,6 +2,7 @@ import { Link, Outlet, useLocation } from 'react-router-dom';
 import { AppBar, Toolbar, Typography, Box, Button, Container, useTheme, useMediaQuery } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import FolderIcon from '@mui/icons-material/Folder';
+import { AuthButtons } from '@/components/auth';
 
 export function MainLayout() {
   const theme = useTheme();
@@ -44,7 +45,7 @@ export function MainLayout() {
             >
               DeltaNotes
             </Typography>
-            <Box sx={{ display: 'flex', gap: 1 }}>
+            <Box sx={{ display: 'flex', gap: 1, mr: 2 }}>
               <Button 
                 component={Link} 
                 to="/" 
@@ -74,6 +75,9 @@ export function MainLayout() {
                 {isMobile ? '' : 'Resources'}
               </Button>
             </Box>
+            
+            {/* Auth Buttons */}
+            <AuthButtons />
           </Toolbar>
         </Container>
       </AppBar>

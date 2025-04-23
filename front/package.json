@@ -19,6 +19,7 @@
     "@tailwindcss/forms": "^0.5.10",
     "axios": "^1.8.4",
     "dompurify": "^3.2.4",
+    "keycloak-js": "^26.1.5",
     "markdown-parser-react": "^2.0.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

@@ -143,7 +143,7 @@ services:
       - POSTGRES_PASSWORD=${SEARCH_DB_PASSWORD}
       - POSTGRES_DB=${SEARCH_DB_NAME}
     ports:
-      - ${AUTH_DB_PORT}:${AUTH_DB_PORT}
+      - ${AUTH_DB_PORT}:5432
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}" ]
       interval: 5s
@@ -165,7 +165,7 @@ services:
       - POSTGRES_PASSWORD=${SEARCH_DB_PASSWORD}
       - POSTGRES_DB=${SEARCH_DB_NAME}
     ports:
-      - ${SEARCH_DB_PORT}:${SEARCH_DB_PORT}
+      - ${SEARCH_DB_PORT}:5432
     volumes:
       - ./search_database/.data:/var/lib/postgresql/.data
       - ./search_database/scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
