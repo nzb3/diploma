@@ -1,8 +1,15 @@
 services:
+  ollama-generator:
+    environment:
+      - OLLAMA_DEBUG=true
+  ollama-embedder:
+    environment:
+      - OLLAMA_DEBUG=true
   search:
     build:
       target: debug
-
+    environment:
+      - GIN_DEBUG=true
     ports:
       - "8080:8080"
       - "40000:40000"
