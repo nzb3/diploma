@@ -4,10 +4,10 @@ go 1.24.0
 
 require (
 	github.com/JohannesKaufmann/html-to-markdown/v2 v2.3.1
+	github.com/Nerzal/gocloak/v13 v13.9.0
 	github.com/gen2brain/go-fitz v1.24.14
 	github.com/gin-contrib/cors v1.7.5
 	github.com/gin-gonic/gin v1.10.0
-	github.com/golang-jwt/jwt/v5 v5.2.2
 	github.com/google/uuid v1.6.0
 	github.com/nzb3/closer v1.0.0
 	github.com/nzb3/slogmanager v1.0.0
@@ -37,7 +37,6 @@ require (
 	github.com/Masterminds/goutils v1.1.1 // indirect
 	github.com/Masterminds/semver/v3 v3.3.1 // indirect
 	github.com/Masterminds/sprig/v3 v3.2.3 // indirect
-	github.com/Nerzal/gocloak/v13 v13.9.0 // indirect
 	github.com/OpenPeeDeeP/depguard/v2 v2.2.1 // indirect
 	github.com/PuerkitoBio/goquery v1.8.1 // indirect
 	github.com/alecthomas/go-check-sumtype v0.3.1 // indirect
@@ -107,6 +106,7 @@ require (
 	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/gofrs/flock v0.12.1 // indirect
+	github.com/golang-jwt/jwt/v5 v5.2.2 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/golangci/dupl v0.0.0-20250308024227-f665c8d69b32 // indirect
 	github.com/golangci/go-printf-func-name v0.1.0 // indirect
