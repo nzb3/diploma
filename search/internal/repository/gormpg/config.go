@@ -12,7 +12,7 @@ type Config struct {
 func NewConfig() (*Config, error) {
 	// TODO: read from env
 	return &Config{
-		DSN:      "postgres://postgres:postgres@postgres:5432/postgres?sslmode=disable",
+		DSN:      "postgres://postgres:postgres@search_database:5432/postgres?sslmode=disable",
 		DBName:   "postgres",
 		User:     "postgres",
 		Password: "postgres",

@@ -33,7 +33,7 @@ services:
         condition: service_started
       ollama-generator:
         condition: service_started
-      postgres:
+      search_database:
         condition: service_healthy
     networks:
       webservices:
