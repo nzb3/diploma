@@ -27,7 +27,7 @@ services:
       dockerfile: Dockerfile
     container_name: search
     ports:
-      - "8080:8080"
+      - "8081:8080"
     depends_on:
       ollama-embedder:
         condition: service_started
@@ -103,21 +103,47 @@ services:
         - action: rebuild
           path: ./embedder/Dockerfile
 
-  postgres:
-    image: pgvector/pgvector:pg17
-    container_name: postgres
-    hostname: postgres
+  auth:
+    image: quay.io/keycloak/keycloak:23.0.2
+    container_name: auth
+    env_file:
+      - .env
+    environment:
+      KEYCLOAK_ADMIN: ${AUTH_ADMIN_LOGIN}
+      KEYCLOAK_ADMIN_PASSWORD: ${AUTH_ADMIN_PASSWORD}
+      KC_DB: postgres
+      KC_DB_URL: ${AUTH_DB_URL}
+      KC_DB_USERNAME: ${AUTH_DB_USER}
+      KC_DB_PASSWORD: ${AUTH_DB_PASSWORD}
+      KC_HOSTNAME: ${AUTH_HOST}
+      KC_HOSTNAME_PORT: ${AUTH_PORT}
+      KC_HOSTNAME_STRICT: 'false'
+      KC_HOSTNAME_STRICT_HTTPS: 'false'
+      KC_HTTP_ENABLED: 'true'
+    command: start
+    depends_on:
+      auth_database:
+        condition: service_healthy
+    ports:
+      - '8080:8080'
+    networks:
+      webservices:
+        aliases:
+          - auth
+
+  auth_database:
+    image: postgres:17
+    volumes:
+      - ./auth_database/.data:/var/lib/postgresql/data
     env_file:
       - ./.env
     environment:
-      - POSTGRES_USER=${DB_USER}
-      - POSTGRES_PASSWORD=${DB_PASSWORD}
-      - POSTGRES_DB=${DB_NAME}
+      - POSTGRES_DB=${AUTH_DB_NAME}
+      - POSTGRES_USER=${SEARCH_DB_USER}
+      - POSTGRES_PASSWORD=${SEARCH_DB_PASSWORD}
+      - POSTGRES_DB=${SEARCH_DB_NAME}
     ports:
-      - ${DB_PORT}:${DB_PORT}
-    volumes:
-      - ./postgres/.data:/var/lib/postgresql/.data
-      - ./postgres/scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ${AUTH_DB_PORT}:${AUTH_DB_PORT}
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}" ]
       interval: 5s
@@ -126,7 +152,32 @@ services:
     networks:
       webservices:
         aliases:
-          - postgres
+          - auth_database
+
+  search_database:
+    image: pgvector/pgvector:pg17
+    container_name: search_database
+    hostname: search_database
+    env_file:
+      - ./.env
+    environment:
+      - POSTGRES_USER=${SEARCH_DB_USER}
+      - POSTGRES_PASSWORD=${SEARCH_DB_PASSWORD}
+      - POSTGRES_DB=${SEARCH_DB_NAME}
+    ports:
+      - ${SEARCH_DB_PORT}:${SEARCH_DB_PORT}
+    volumes:
+      - ./search_database/.data:/var/lib/postgresql/.data
+      - ./search_database/scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      webservices:
+        aliases:
+          - search_database
 
 networks:
   webservices:

@@ -11,6 +11,7 @@ services:
     environment:
       - GIN_DEBUG=true
     ports:
-      - "8080:8080"
       - "40000:40000"
+  auth:
+    command: start-dev
 

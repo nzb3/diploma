@@ -2,3 +2,5 @@ services:
   search:
     build:
       target: release
+  auth:
+    command: start
