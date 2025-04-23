@@ -55,6 +55,8 @@ services:
     hostname: ollama-generator
     ports:
       - "11434:11434"
+    environment:
+      - OLLAMA_NUM_PARALLEL=2
     volumes:
       - ./generator/.data:/root/.ollama
       - ./generator/entrypoint.sh:/entrypoint.sh
@@ -80,6 +82,8 @@ services:
     hostname: ollama-embedder
     ports:
       - "11435:11434"
+    environment:
+      - OLLAMA_NUM_PARALLEL=2
     volumes:
       - ./embedder/.data:/root/.ollama
       - ./embedder/entrypoint.sh:/entrypoint.sh
