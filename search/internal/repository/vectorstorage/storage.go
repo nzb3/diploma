@@ -2,6 +2,7 @@ package vectorstorage
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -16,9 +17,12 @@ import (
 	"github.com/tmc/langchaingo/vectorstores"
 	"github.com/tmc/langchaingo/vectorstores/pgvector"
 
+	"github.com/nzb3/diploma/search/internal/controllers/middleware"
 	"github.com/nzb3/diploma/search/internal/domain/models"
 	"github.com/nzb3/diploma/search/internal/repository/vectorstorage/callback"
 )
+
+const userIDFilter = "user_id"
 
 type Error error
 
@@ -112,7 +116,20 @@ func (s *VectorStorage) addDocuments(ctx context.Context, docs []schema.Document
 	slog.DebugContext(ctx, "Adding documents to vector store",
 		"documents_count", len(docs))
 
-	ids, err := s.vectorStore.AddDocuments(ctx, docs)
+	userID, err := getUserID(ctx)
+	if err != nil {
+		slog.ErrorContext(ctx, "Error getting user ID",
+			"op", op,
+			"error", err,
+		)
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+
+	filters := map[string]interface{}{
+		userIDFilter: userID,
+	}
+
+	ids, err := s.vectorStore.AddDocuments(ctx, docs, vectorstores.WithFilters(filters))
 	if err != nil {
 		slog.ErrorContext(ctx, "Failed to add documents",
 			"op", op,
@@ -237,7 +254,18 @@ func (s *VectorStorage) ask(ctx context.Context, question string, opts ...chains
 			callback.WithRetrieverEndFunc(newRetrieverEndHandler(refsCh)),
 		)
 
-		retriever := s.setupRetriever(cb)
+		userID, err := getUserID(ctx)
+		if err != nil {
+			slog.ErrorContext(ctx, "Failed to get user ID", "op", op, "error", err)
+			errCh <- fmt.Errorf("%s: %w", op, err)
+			return
+		}
+
+		filters := map[string]interface{}{
+			userIDFilter: userID,
+		}
+
+		retriever := s.setupRetriever(filters, cb)
 		retrievalQAChain := s.setupRetrievalQA(retriever)
 		opts = append(opts, chains.WithMaxTokens(s.cfg.MaxTokens), chains.WithCallback(cb))
 
@@ -278,11 +306,18 @@ func newRetrieverEndHandler(refsChans ...chan<- []models.Reference) func(ctx con
 	}
 }
 
-func (s *VectorStorage) setupRetriever(callbackHandler ...*callback.Handler) *vectorstores.Retriever {
+func getUserID(ctx context.Context) (string, error) {
+	userID, ok := middleware.GetUserID(ctx)
+	if !ok {
+		return "", errors.New("user ID not found in context")
+	}
+	return userID, nil
+}
+
+func (s *VectorStorage) setupRetriever(filters map[string]interface{}, callbackHandler ...*callback.Handler) *vectorstores.Retriever {
 	slog.DebugContext(context.Background(), "Configuring retriever",
 		"num_results", s.cfg.NumOfResults)
-
-	retriever := vectorstores.ToRetriever(s.vectorStore, s.cfg.NumOfResults)
+	retriever := vectorstores.ToRetriever(s.vectorStore, s.cfg.NumOfResults, vectorstores.WithFilters(filters))
 	if len(callbackHandler) > 0 {
 		retriever.CallbacksHandler = callbackHandler[0]
 	}
