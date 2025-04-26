@@ -42,6 +42,7 @@ func NewService(rr resourceRepository, rp resourceProcessor) *Service {
 	}
 }
 
+// TODO: move to context provider
 // getUserID attempts to get the authenticated user ID from context
 // If not found, returns an error
 func getUserID(ctx context.Context) (string, error) {
@@ -278,7 +279,12 @@ func (s *Service) runSaveResourcePipeline(ctx context.Context, resource models.R
 		return models.Resource{}, fmt.Errorf("%s: %w", op, err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
+	ctx, cancel := context.WithTimeout(
+		context.WithValue(
+			context.Background(),
+			"user_id",
+			resource.OwnerID,
+		), 20*time.Minute)
 	go func() {
 		defer cancel()
 

@@ -92,7 +92,7 @@ func (s *VectorStorage) PutText(ctx context.Context, text string) ([]string, err
 	const op = "VectorStorage.PutText"
 	slog.DebugContext(ctx, "Processing text content",
 		"content_length", len(text))
-
+	// TODO: обработать перед сохранением в векторном хранилище
 	docs, err := documentloaders.NewText(strings.NewReader(text)).
 		LoadAndSplit(
 			ctx,
@@ -125,11 +125,13 @@ func (s *VectorStorage) addDocuments(ctx context.Context, docs []schema.Document
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
-	filters := map[string]interface{}{
-		userIDFilter: userID,
+	for i := range docs {
+		docs[i].Metadata = map[string]any{
+			userIDFilter: userID,
+		}
 	}
 
-	ids, err := s.vectorStore.AddDocuments(ctx, docs, vectorstores.WithFilters(filters))
+	ids, err := s.vectorStore.AddDocuments(ctx, docs)
 	if err != nil {
 		slog.ErrorContext(ctx, "Failed to add documents",
 			"op", op,

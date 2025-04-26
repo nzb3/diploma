@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/Nerzal/gocloak/v13"
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 // Constants for context keys
@@ -47,23 +49,61 @@ func NewAuthMiddleware(config *AuthMiddlewareConfig) *AuthMiddleware {
 	}
 }
 
+func (k *AuthMiddleware) getToken(ctx *gin.Context) (*jwt.Token, *jwt.MapClaims, error) {
+	token, claims, headersErr := k.getFromHeaders(ctx)
+	if headersErr == nil {
+		return token, claims, nil
+	}
+
+	token, claims, paramsErr := k.getFromParams(ctx)
+	if paramsErr == nil {
+		return token, claims, nil
+	}
+
+	err := errors.Join(headersErr, paramsErr)
+	return nil, nil, fmt.Errorf("token was not found neither in headers nor in params: %w", err)
+}
+
+func (k *AuthMiddleware) getFromParams(ctx *gin.Context) (*jwt.Token, *jwt.MapClaims, error) {
+	tokenString := ctx.Query("auth_token")
+	if tokenString == "" {
+		return nil, nil, errors.New("token is required")
+	}
+
+	token, claims, err := k.keycloak.DecodeAccessToken(ctx, tokenString, k.config.Realm)
+	if err != nil {
+		return nil, nil, err
+	}
+	return token, claims, nil
+}
+
+func (k *AuthMiddleware) getFromHeaders(ctx *gin.Context) (*jwt.Token, *jwt.MapClaims, error) {
+	authHeader := ctx.GetHeader("Authorization")
+	if authHeader == "" {
+		return nil, nil, errors.New("authorization header is required")
+	}
+
+	if !strings.HasPrefix(authHeader, "Bearer ") {
+		return nil, nil, errors.New("invalid authorization format")
+
+	}
+
+	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+	if tokenString == "" {
+		return nil, nil, errors.New("token not found")
+	}
+
+	token, claims, err := k.keycloak.DecodeAccessToken(ctx, tokenString, k.config.Realm)
+	if err != nil {
+		return nil, nil, err
+	}
+	return token, claims, nil
+}
+
 // Authenticate creates a gin handler function for Keycloak authentication
 func (k *AuthMiddleware) Authenticate() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		authHeader := ctx.GetHeader("Authorization")
-		if authHeader == "" {
-			ctx.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Authorization header is required"})
-			return
-		}
-
-		if !strings.HasPrefix(authHeader, "Bearer ") {
-			ctx.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Invalid authorization format"})
-			return
-		}
-
-		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-
-		token, _, err := k.keycloak.DecodeAccessToken(ctx, tokenString, k.config.Realm)
+		token, _, err := k.getToken(ctx)
 		if err != nil {
 			slog.Error("failed to decode access token", "error", err)
 			ctx.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
@@ -77,14 +117,14 @@ func (k *AuthMiddleware) Authenticate() gin.HandlerFunc {
 			return
 		}
 
-		isValid, err := k.validateToken(ctx, tokenString)
+		isValid, err := k.validateToken(ctx, token.Raw)
 		if err != nil || !isValid {
 			slog.Error("token validation failed", "error", err)
 			ctx.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Token validation failed"})
 			return
 		}
 
-		userName, roles, err := k.getUserInfo(ctx, tokenString)
+		userName, roles, err := k.getUserInfo(ctx, token.Raw)
 		if err != nil {
 			slog.Error("failed to get user info", "error", err)
 			// Continue anyway as we have the user ID
