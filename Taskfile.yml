@@ -12,7 +12,7 @@ tasks:
     silent: true
   recreate-frontend:
     cmds:
-      - docker compose up front --build -d
+      - docker compose build front
     silent: true
   run-frontend-local:
     cmds:
