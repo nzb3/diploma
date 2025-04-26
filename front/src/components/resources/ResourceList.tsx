@@ -1,4 +1,4 @@
-import { Resource } from '../../types/api';
+import { Resource } from '@/types/api';
 import { ResourceListItem } from './ResourceListItem';
 import { ResourceLegend } from './ResourceLegend';
 import { 
@@ -35,6 +35,9 @@ export function ResourceList({
   onRefreshResources,
 }: ResourceListProps) {
   const [showLegend, setShowLegend] = useState(false);
+  
+  // Ensure resources is always an array
+  const safeResources = Array.isArray(resources) ? resources : [];
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -110,7 +113,7 @@ export function ResourceList({
         </Collapse>
         
         <Box mt={2}>
-          {resources.length === 0 ? (
+          {safeResources.length === 0 ? (
             <Box textAlign="center" py={5}>
               <Typography color="text.secondary">
                 No resources found. Upload a resource to get started.
@@ -118,7 +121,7 @@ export function ResourceList({
             </Box>
           ) : (
             <List disablePadding>
-              {resources.map((resource) => (
+              {safeResources.map((resource: Resource) => (
                 <Box key={resource.id}>
                   <ResourceListItem
                     resource={resource}

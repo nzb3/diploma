@@ -109,9 +109,9 @@ export function ChatProvider({ children }: ChatProviderProps) {
         eventSourceRef.current = null;
       }
 
-      // Create new EventSource
-      eventSourceRef.current = await streamAnswer(question);
-      const eventSource = eventSourceRef.current;
+      // Create new EventSource - now awaiting the promise since streamAnswer is async
+      const eventSource = await streamAnswer(question);
+      eventSourceRef.current = eventSource;
 
       // Listen for chunk events
       eventSource.addEventListener('chunk', (event) => {
@@ -251,72 +251,56 @@ export function ChatProvider({ children }: ChatProviderProps) {
       });
 
       // Listen for error events
-      eventSource.addEventListener('error', (error) => {
-        console.error('Error event received:', error);
+      eventSource.addEventListener('error', (event) => {
+        console.error('Error event from SSE connection:', event);
         
-        // Don't immediately close the connection if we've received some data
-        if (hasReceivedData.current) {
-          console.log('Error occurred but data already received, trying to continue');
-          // Just reset the timer and wait for potential recovery
-          resetActivityTimer();
-          return;
-        }
-        
-        // If no data received yet, close the connection
-        cleanupConnection();
-        
-        // Only show the error message if we haven't received any data yet
+        // Check if we ever received any data
         if (!hasReceivedData.current) {
-          // Update the last message with the error
+          // If no data was received, add an error message
           setMessages(prev => {
             const newMessages = [...prev];
-            const lastMessage = newMessages[newMessages.length - 1];
-            if (lastMessage?.role === 'assistant') {
-              lastMessage.content = 'Sorry, we have some issues. Please try again later';
-              return newMessages;
-            } else {
-              return [...prev, { role: 'assistant', content: 'Sorry, we have some issues. Please try again later' }];
+            const lastUserMessageIndex = newMessages.findIndex(m => m.role === 'user');
+            
+            if (lastUserMessageIndex !== -1) {
+              return [
+                ...newMessages.slice(0, lastUserMessageIndex + 1),
+                { role: 'assistant', content: 'Sorry, I was unable to generate a response. Please try again.' }
+              ];
             }
+            
+            return newMessages;
           });
         }
+        
+        // Clean up the connection
+        cleanupConnection();
       });
-
     } catch (error) {
-      console.error('Failed to initialize streaming:', error);
-      cleanupConnection();
+      console.error('Error setting up SSE connection:', error);
       
-      // Create or update the assistant message
-      setMessages(prev => {
-        const newMessages = [...prev];
-        const lastMessage = newMessages[newMessages.length - 1];
-        if (lastMessage?.role === 'assistant') {
-          lastMessage.content = 'Sorry, we have some issues. Please try again later';
-          return newMessages;
-        } else {
-          return [...prev, { role: 'assistant', content: 'Sorry, we have some issues. Please try again later' }];
-        }
-      });
+      // Add error message for failed connection setup
+      setMessages(prev => [
+        ...prev, 
+        { role: 'assistant', content: 'Sorry, there was an error connecting to the service. Please try again later.' }
+      ]);
+      
+      cleanupConnection();
     }
   };
 
   const cancelGeneration = async () => {
     if (currentProcessId) {
       try {
-        console.log('Attempting to cancel stream with process ID:', currentProcessId);
         await cancelStream(currentProcessId);
-        console.log('Stream cancellation request sent');
       } catch (error) {
-        console.error('Error canceling stream:', error);
-      } finally {
-        cleanupConnection();
+        console.error('Error cancelling stream:', error);
       }
-    } else {
-      console.log('No process ID available to cancel');
-      cleanupConnection();
     }
+    
+    cleanupConnection();
   };
 
-  // Cleanup on unmount
+  // Clean up resources on unmount
   useEffect(() => {
     return () => {
       cleanupConnection();
@@ -324,15 +308,13 @@ export function ChatProvider({ children }: ChatProviderProps) {
   }, [cleanupConnection]);
 
   return (
-    <ChatContext.Provider
-      value={{
-        messages,
-        isLoading,
-        submitQuestion,
-        cancelGeneration,
-        decodeHtmlEntities,
-      }}
-    >
+    <ChatContext.Provider value={{ 
+      messages, 
+      isLoading, 
+      submitQuestion, 
+      cancelGeneration,
+      decodeHtmlEntities, 
+    }}>
       {children}
     </ChatContext.Provider>
   );

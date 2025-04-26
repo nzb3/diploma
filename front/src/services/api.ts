@@ -4,6 +4,7 @@ import authService from './authService';
 
 const API_BASE_URL = '/api/v1';
 
+
 const api = axios.create({
   baseURL: API_BASE_URL,
   withCredentials: true,
@@ -12,7 +13,6 @@ const api = axios.create({
   }
 });
 
-// Add interceptor to include auth token in requests
 api.interceptors.request.use(
   async (config) => {
     if (authService.isAuthenticated()) {
@@ -32,19 +32,16 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
     
-    // If the error is unauthorized and we haven't tried to refresh the token yet
-    if ((error.response?.status === 401 || error.response?.status === 403) && 
+    if ((error.response?.status === 401 || error.response?.status === 403) &&
         !originalRequest._retry && 
         authService.isAuthenticated()) {
       
       originalRequest._retry = true;
       
       try {
-        // Try to refresh the token
         const refreshed = await authService.updateToken(10);
         
         if (refreshed) {
-          // If token refresh was successful, retry the original request
           const token = authService.getToken();
           if (token) {
             originalRequest.headers.Authorization = `Bearer ${token}`;
@@ -53,7 +50,6 @@ api.interceptors.response.use(
         }
       } catch (refreshError) {
         console.error('Failed to refresh token', refreshError);
-        // If refresh fails, redirect to login
         authService.login();
       }
     }
@@ -61,6 +57,26 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+// Helper function to create an EventSource that works with interceptors
+const createSSEConnection = async (url: string): Promise<EventSource> => {
+  // First, apply the same authentication logic from interceptors
+  const fullUrl = `${window.location.origin}${API_BASE_URL}${url}`;
+  const urlObj = new URL(fullUrl);
+  
+  if (authService.isAuthenticated()) {
+    const token = authService.getToken();
+    if (token) {
+      // Add token as URL parameter so EventSource can use it
+      urlObj.searchParams.append('auth_token', token);
+    }
+  }
+  
+  // Create a native EventSource with the authenticated URL
+  return new EventSource(urlObj.toString(), {
+    withCredentials: true
+  });
+};
 
 export const getResources = async (): Promise<Resource[]> => {
   const response = await api.get('/resources');
@@ -77,18 +93,11 @@ export const deleteResource = async (id: string): Promise<void> => {
 };
 
 export const saveResource = async (data: SaveDocumentRequest): Promise<EventSource> => {
+  // First, upload the resource
   await api.post('/resources', data);
   
-  const eventSourceUrl = `${window.location.origin}${API_BASE_URL}/resources`;
-  
-  // Add authentication to EventSource if available
-  const eventSourceOptions: EventSourceInit = {
-    withCredentials: true,
-  };
-  
-  const eventSource = new EventSource(eventSourceUrl, eventSourceOptions);
-  
-  return eventSource;
+  // Then create SSE connection to track processing
+  return createSSEConnection('/resources');
 };
 
 export const askQuestion = async (data: AskRequest): Promise<AskResponse> => {
@@ -96,19 +105,11 @@ export const askQuestion = async (data: AskRequest): Promise<AskResponse> => {
   return response.data;
 };
 
-export const streamAnswer = (question: string): EventSource => {
-  const url = new URL(`${window.location.origin}${API_BASE_URL}/ask/stream`);
-
-  url.searchParams.append('question', question);
-
-  // Create EventSource with proper authorization if available
-  const eventSourceOptions: EventSourceInit = {
-    withCredentials: true,
-  };
+export const streamAnswer = async (question: string): Promise<EventSource> => {
+  // Create a combined endpoint that handles both posting the question and streaming the answer
+  const queryParams = new URLSearchParams({ question });
   
-  const eventSource = new EventSource(url.toString(), eventSourceOptions);
-  
-  return eventSource;
+  return createSSEConnection(`/ask/stream?${queryParams.toString()}`);
 };
 
 export const cancelStream = async (processId: string): Promise<void> => {

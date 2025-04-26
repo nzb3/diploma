@@ -31,9 +31,12 @@ export default function ResourcesPage() {
     setIsLoading(true);
     try {
       const data = await getResources();
-      setResources(data);
+      // Ensure data is an array
+      setResources(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Failed to load resources:', error);
+      // Set empty array on error
+      setResources([]);
     } finally {
       setIsLoading(false);
     }
@@ -49,31 +52,37 @@ export default function ResourcesPage() {
       const eventSource = await saveResource(data);
 
       eventSource.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        
-        if (data.status_update) {
-          const update = data.status_update as ResourceEvent;
+        try {
+          const data = JSON.parse(event.data);
+          
+          if (data.status_update) {
+            const update = data.status_update as ResourceEvent;
 
-          // Update the resource status instead of progress
-          setResources(prevResources => {
-            return prevResources.map(resource => {
-              if (resource.id === update.id) {
-                return { ...resource, status: update.status };
-              }
-              return resource;
+            // Update the resource status instead of progress
+            setResources(prevResources => {
+              if (!Array.isArray(prevResources)) return [];
+              
+              return prevResources.map(resource => {
+                if (resource.id === update.id) {
+                  return { ...resource, status: update.status };
+                }
+                return resource;
+              });
             });
-          });
 
-          if (update.error) {
-            setUploadErrors(prev => ({
-              ...prev,
-              [update.id]: update.error || 'Unknown error',
-            }));
+            if (update.error) {
+              setUploadErrors(prev => ({
+                ...prev,
+                [update.id]: update.error || 'Unknown error',
+              }));
+              loadResources();
+            }
+          } else if (data.completed) {
+            setIsUploading(false);
             loadResources();
           }
-        } else if (data.completed) {
-          setIsUploading(false);
-          loadResources();
+        } catch (error) {
+          console.error('Error processing SSE message:', error);
         }
       };
 
@@ -91,7 +100,11 @@ export default function ResourcesPage() {
   const handleDeleteResource = async (id: string) => {
     try {
       await deleteResource(id);
-      setResources(resources.filter(r => r.id !== id));
+      setResources(prevResources => 
+        Array.isArray(prevResources) 
+          ? prevResources.filter(r => r.id !== id)
+          : []
+      );
     } catch (error) {
       console.error('Failed to delete resource:', error);
     }
