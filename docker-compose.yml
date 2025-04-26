@@ -122,6 +122,8 @@ services:
       KC_HTTP_ENABLED: 'true'
     command: start
     depends_on:
+      mailhog:
+        condition: service_started
       auth_database:
         condition: service_healthy
     ports:
@@ -156,10 +158,15 @@ services:
   mailhog:
     image: mailhog/mailhog:latest
     hostname: mailhog
+    platform: linux/amd64
     restart: always
     ports:
       - 1025:1025  # SMTP port
       - 8025:8025  # Web UI port
+    networks:
+      webservices:
+        aliases:
+          - mailhog
 
   search_database:
     image: pgvector/pgvector:pg17
