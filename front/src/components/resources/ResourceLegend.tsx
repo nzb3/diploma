@@ -17,8 +17,12 @@ export function ResourceLegend() {
         Resource Legend
       </Typography>
       
-      <Stack direction={{ xs: 'column', md: 'row' }} spacing={3}>
-        <Box>
+      <Stack 
+        direction={{ xs: 'column', md: 'row' }} 
+        spacing={{ xs: 2, md: 3 }}
+        alignItems={{ xs: 'flex-start', md: 'center' }}
+      >
+        <Box flex={1}>
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
             Status Types:
           </Typography>
@@ -59,11 +63,20 @@ export function ResourceLegend() {
           </Box>
         </Box>
         
-        <Box>
+        <Box flex={1}>
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
             Resource Types:
           </Typography>
-          <Box display="flex" gap={2} flexWrap="wrap">
+          <Box 
+            display="flex" 
+            gap={{ xs: 1.5, md: 2 }} 
+            flexWrap="wrap"
+            sx={{ 
+              '& > *': { 
+                minWidth: { xs: 'calc(50% - 12px)', md: 'auto' }
+              }
+            }}
+          >
             <Box display="flex" alignItems="center" gap={0.5}>
               <PictureAsPdfIcon fontSize="small" sx={{ color: '#f44336' }} />
               <Typography variant="body2">PDF</Typography>
