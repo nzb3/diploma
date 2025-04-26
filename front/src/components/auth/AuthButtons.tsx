@@ -4,11 +4,13 @@ import LogoutIcon from '@mui/icons-material/Logout';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import { useAuth } from '@/context';
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 export function AuthButtons() {
   const { isAuthenticated, username, login, logout, register } = useAuth();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const open = Boolean(anchorEl);
+  const navigate = useNavigate();
 
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
@@ -21,6 +23,7 @@ export function AuthButtons() {
   const handleLogout = () => {
     handleClose();
     logout();
+    navigate('/');
   };
 
   // Show user profile when authenticated

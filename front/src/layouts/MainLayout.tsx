@@ -3,8 +3,13 @@ import { AppBar, Toolbar, Typography, Box, Button, Container, useTheme, useMedia
 import SearchIcon from '@mui/icons-material/Search';
 import FolderIcon from '@mui/icons-material/Folder';
 import { AuthButtons } from '@/components/auth';
+import React from 'react';
 
-export function MainLayout() {
+interface MainLayoutProps {
+  children?: React.ReactNode;
+}
+
+export function MainLayout({ children }: MainLayoutProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const location = useLocation();
@@ -32,19 +37,24 @@ export function MainLayout() {
         }}
       >
         <Container maxWidth="lg">
-          <Toolbar sx={{ px: { xs: 1, sm: 2 } }}>
-            <Typography 
-              variant="h6" 
-              component="div" 
-              sx={{ 
-                flexGrow: 1, 
-                fontWeight: 'bold', 
-                color: 'text.primary',
-                fontSize: { xs: '1.1rem', sm: '1.25rem' }
-              }}
+          <Toolbar sx={{ display: 'flex', justifyContent: 'space-between', px: { xs: 1, sm: 2 } }}>
+            <Button 
+              component={Link} 
+              to="/" 
             >
-              DeltaNotes
-            </Typography>
+              <Typography 
+                variant="h6" 
+                component="div" 
+                sx={{ 
+                  flexGrow: 1, 
+                  fontWeight: 'bold', 
+                  color: 'text.primary',
+                  fontSize: { xs: '1.1rem', sm: '1.25rem' }
+                }}
+              >
+                DeltaNotes
+              </Typography>
+            </Button>
             <Box sx={{ display: 'flex', gap: 1, mr: 2 }}>
               <Button 
                 component={Link} 
@@ -92,7 +102,7 @@ export function MainLayout() {
           flexDirection: 'column'
         }}
       >
-        <Outlet />
+        {children || <Outlet />}
       </Box>
     </Box>
   );
