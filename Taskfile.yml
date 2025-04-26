@@ -1,6 +1,5 @@
 version: '3'
 
-
 tasks:
   run-debug:
     cmds:
@@ -12,18 +11,18 @@ tasks:
     silent: true
   recreate-frontend:
     cmds:
-      - docker compose build front
+      - docker compose up --force-recreate --no-deps front -d --build
     silent: true
   run-frontend-local:
     cmds:
       - cd front && npm run dev
   recreate-backend-debug:
     cmds:
-      - docker compose -f docker-compose.yml -f docker-compose.debug.yml up search --build -d
+      - docker compose -f docker-compose.yml -f docker-compose.debug.yml up -force-recreate --no-deps search --build -d
     silent: true
   recreate-backend-prod:
     cmds:
-      - docker compose -f docker-compose.yml -f docker-compose.prod.yml up search --build -d
+      - docker compose -f docker-compose.yml -f docker-compose.prod.yml up -force-recreate --no-deps search --build -d
     silent: true
   down-all-delete-search_db:
     cmds:
