@@ -1,23 +1,25 @@
 import { useState, useEffect } from 'react';
 import { getResources, saveResource, deleteResource, getResource } from '../services/api';
 import { Resource, ResourceEvent, SaveDocumentRequest } from '../types/api';
-import { 
-  ResourceList, 
-  ResourceModal, 
-  ResourceUploadForm 
+import {
+  ResourceList,
+  ResourceModal,
+  ResourceUploadForm
 } from '@components/resources';
-import { Box } from '@mui/material';
+import { Box, useTheme, useMediaQuery } from '@mui/material';
 
 export default function ResourcesPage() {
   const [resources, setResources] = useState<Resource[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  
   const [uploadErrors, setUploadErrors] = useState<Record<string, string>>({});
-  
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedResource, setSelectedResource] = useState<Resource | null>(null);
   const [isLoadingResource, setIsLoadingResource] = useState(false);
+
+  // Use theme breakpoints to detect mobile layout
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   // Load resources on component mount
   useEffect(() => {
@@ -27,7 +29,7 @@ export default function ResourcesPage() {
   // Load resources from the API
   const loadResources = async () => {
     if (isLoading) return;
-    
+
     setIsLoading(true);
     try {
       const data = await getResources();
@@ -54,14 +56,14 @@ export default function ResourcesPage() {
       eventSource.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          
+
           if (data.status_update) {
             const update = data.status_update as ResourceEvent;
 
             // Update the resource status instead of progress
             setResources(prevResources => {
               if (!Array.isArray(prevResources)) return [];
-              
+
               return prevResources.map(resource => {
                 if (resource.id === update.id) {
                   return { ...resource, status: update.status };
@@ -100,10 +102,10 @@ export default function ResourcesPage() {
   const handleDeleteResource = async (id: string) => {
     try {
       await deleteResource(id);
-      setResources(prevResources => 
-        Array.isArray(prevResources) 
-          ? prevResources.filter(r => r.id !== id)
-          : []
+      setResources(prevResources =>
+          Array.isArray(prevResources)
+              ? prevResources.filter(r => r.id !== id)
+              : []
       );
     } catch (error) {
       console.error('Failed to delete resource:', error);
@@ -116,7 +118,7 @@ export default function ResourcesPage() {
     setSelectedResource(resource);
     setIsModalOpen(true);
     console.log('Modal state set to open');
-    
+
     // If we don't have the full resource content, fetch it
     if (!resource.extracted_content && !resource.raw_content) {
       setIsLoadingResource(true);
@@ -140,43 +142,32 @@ export default function ResourcesPage() {
   };
 
   return (
-    <Box sx={{ display: 'flex', height: '100%' }}>
-      {/* Sidebar with ResourceUploadForm */}
-     
-      <ResourceUploadForm 
-        onUpload={handleUploadSubmit}
-        isUploading={isUploading}
-      />
-      
-      
-      {/* Main content area with ResourceList */}
-      <Box 
-        sx={{ 
-          flexGrow: 1, 
-          p: 3, 
-          overflowY: 'auto', 
-          display: 'flex', 
-          justifyContent: 'center'
-        }}
-      >
-        <Box sx={{ width: '100%', maxWidth: 'lg' }}>
-          <ResourceList 
+      <Box sx={{
+        display: 'flex',
+        flexDirection: isMobile ? 'column' : 'row',
+        height: '100vh',
+        overflow: 'hidden'
+      }}>
+        <ResourceUploadForm
+            onUpload={handleUploadSubmit}
+            isUploading={isUploading}
+        />
+
+        <ResourceList
             resources={resources}
             isLoading={isLoading}
             uploadErrors={uploadErrors}
             onResourceClick={handleResourceClick}
             onDeleteResource={handleDeleteResource}
             onRefreshResources={loadResources}
-          />
-        </Box>
+        />
+
+        <ResourceModal
+            isOpen={isModalOpen}
+            resource={selectedResource}
+            isLoading={isLoadingResource}
+            onClose={handleCloseModal}
+        />
       </Box>
-      
-      <ResourceModal 
-        isOpen={isModalOpen}
-        resource={selectedResource}
-        isLoading={isLoadingResource}
-        onClose={handleCloseModal}
-      />
-    </Box>
   );
-} 
+}
