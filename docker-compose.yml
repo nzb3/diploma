@@ -24,6 +24,7 @@ services:
   search:
     build:
       context: ./search
+      target: release
       dockerfile: Dockerfile
     container_name: search
     ports:

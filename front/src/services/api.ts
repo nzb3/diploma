@@ -2,7 +2,7 @@ import axios from 'axios';
 import {AskRequest, AskResponse, Resource, SaveDocumentRequest} from '../types/api';
 import authService from './authService';
 
-const API_BASE_URL = '/api/v1';
+const API_BASE_URL = 'http://search:8080/api/v1';
 
 
 const api = axios.create({

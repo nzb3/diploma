@@ -5,6 +5,18 @@ services:
   ollama-embedder:
     environment:
       - OLLAMA_DEBUG=true
+  front:
+    build:
+      context: ./front
+      target: debug
+    volumes:
+      - ./front:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173"
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+
   search:
     build:
       target: debug
