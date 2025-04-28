@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Resource, Reference } from '@/types/api';
 import { Typography, Box, Link, List, ListItem, CircularProgress } from '@mui/material';
 import {getResource} from "@services/api.ts";
+import {extractWords} from "@services/utils.ts";
 
 interface ReferencesListProps {
     openResourceModal: (resourceId: string, textFragment?: string) => void;
