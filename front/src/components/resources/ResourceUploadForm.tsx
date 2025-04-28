@@ -19,6 +19,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import DescriptionIcon from '@mui/icons-material/Description';
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
 import TextSnippetIcon from '@mui/icons-material/TextSnippet';
+import {safeBase64Encode} from "@services/utils.ts";
 
 interface ResourceUploadFormProps {
   onUpload: (data: SaveDocumentRequest) => Promise<void>;
@@ -38,13 +39,6 @@ export function ResourceUploadForm({ onUpload, isUploading }: ResourceUploadForm
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dropZoneRef = useRef<HTMLDivElement>(null);
-
-  const safeBase64Encode = (str: string): string => {
-    const encoder = new TextEncoder();
-    const utf8Bytes = encoder.encode(str);
-    const binaryString = String.fromCharCode(...utf8Bytes);
-    return btoa(binaryString);
-  };
 
   const resetForm = () => {
     setName('');

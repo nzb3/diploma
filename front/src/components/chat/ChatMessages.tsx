@@ -2,6 +2,7 @@ import { useRef, useEffect } from 'react';
 import { Box, Paper } from '@mui/material';
 import { FormatMessage } from './FormatMessage.tsx';
 import { Message } from '../../types/api';
+import {SaveMessageAsResourceButton} from "@components/chat/SaveMessageAsResourceButton.tsx";
 
 interface ChatMessagesProps {
   messages: Message[];
@@ -45,14 +46,17 @@ export function ChatMessages({ messages, openResourceModal }: ChatMessagesProps)
           <Box
             key={index}
             sx={{
-              display: 'flex',
-              justifyContent: message.role === 'user' ? 'flex-end' : 'flex-start',
-              width: '100%'
+                display: 'flex',
+                justifyContent: message.role === 'user' ? 'flex-end' : 'flex-start',
+                width: '100%'
             }}
           >
             <Paper
               elevation={message.role === 'user' ? 0 : 1}
               sx={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'end',
                 maxWidth: '75%',
                 px: 2,
                 py: 1.5,
@@ -75,6 +79,7 @@ export function ChatMessages({ messages, openResourceModal }: ChatMessagesProps)
               }}
             >
               <FormatMessage message={message} openResourceModal={openResourceModal} />
+                {message.role === 'assistant' && message.content && message.references ? <SaveMessageAsResourceButton message={message}/> : null}
             </Paper>
           </Box>
         ))}
