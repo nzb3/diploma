@@ -171,21 +171,14 @@ func (sp *ServiceProvider) GinEngine(ctx context.Context) *gin.Engine {
 
 	// Configure CORS to allow frontend requests
 	corsConfig := cors.Config{
-		AllowOrigins: []string{
-			"http://localhost:5173/*",
-			"http://localhost:5174/*",
-			"http://localhost:5175/*",
-			"http://localhost/*",
-			"http://localhost:80/*",
-			"http://front/*",
-			"http://front:80/*",
-		},
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length", "Content-Type"},
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	}
+	corsConfig.AllowAllOrigins = true
+
 	engine.Use(cors.New(corsConfig))
 
 	engine.Use(gin.Logger())
