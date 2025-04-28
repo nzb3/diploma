@@ -14,3 +14,10 @@ export const getStatusDescription = (status: string) => {
             return 'Status unknown';
     }
 };
+
+export const safeBase64Encode = (str: string): string => {
+    const encoder = new TextEncoder();
+    const utf8Bytes = encoder.encode(str);
+    const binaryString = String.fromCharCode(...utf8Bytes);
+    return btoa(binaryString);
+};
