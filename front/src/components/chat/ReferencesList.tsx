@@ -52,8 +52,7 @@ export const ReferencesList: React.FC<ReferencesListProps> = ({ openResourceModa
     };
 
     const getPreviewText = (content: string, wordCount: number = 5): string => {
-        const words = content.split(/\s+/);
-        return words.slice(0, wordCount).join(' ') + (words.length > wordCount ? '...' : '');
+        return extractWords(content, wordCount)+'...';
     };
 
     if (loading) {
