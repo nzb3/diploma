@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"strings"
 
 	"github.com/samber/lo"
@@ -92,7 +93,7 @@ func (s *VectorStorage) PutText(ctx context.Context, text string) ([]string, err
 	const op = "VectorStorage.PutText"
 	slog.DebugContext(ctx, "Processing text content",
 		"content_length", len(text))
-	// TODO: обработать перед сохранением в векторном хранилище
+	text = clearText(text)
 	docs, err := documentloaders.NewText(strings.NewReader(text)).
 		LoadAndSplit(
 			ctx,
@@ -343,4 +344,10 @@ func parseReferences(docs []schema.Document) []models.Reference {
 			Score:   doc.Score,
 		}
 	})
+}
+
+func clearText(text string) string {
+	// Regex matches ![alt](url), including empty alt and data URLs
+	re := regexp.MustCompile(`!\[[^\]]*\]\([^)]+\)`)
+	return re.ReplaceAllString(text, "")
 }

@@ -16,7 +16,7 @@ import (
 )
 
 type resourceService interface {
-	SaveResource(ctx context.Context, resource models.Resource, statusUpdateCh chan<- models.ResourceStatusUpdate) (models.Resource, error)
+	SaveResource(ctx context.Context, resource models.Resource) (<-chan models.Resource, <-chan models.ResourceStatusUpdate, <-chan error)
 	GetResources(ctx context.Context) ([]models.Resource, error)
 	GetResourceByID(ctx context.Context, resourceID uuid.UUID) (models.Resource, error)
 	DeleteResource(ctx context.Context, resourceID uuid.UUID) error
@@ -75,17 +75,7 @@ func (c *Controller) SaveResource() gin.HandlerFunc {
 			URL:        req.URL,
 		}
 
-		statusUpdateCh := make(chan models.ResourceStatusUpdate)
-		resourceCh := make(chan models.Resource)
-		errCh := make(chan error)
-
-		go func() {
-			resource, err := c.service.SaveResource(ctx, resource, statusUpdateCh)
-			if err != nil {
-				errCh <- err
-			}
-			resourceCh <- resource
-		}()
+		resourceCh, statusUpdateCh, errCh := c.service.SaveResource(ctx, resource)
 
 		ctx.Stream(func(w io.Writer) bool {
 			select {
@@ -195,7 +185,7 @@ func (c *Controller) handleResource(ctx *gin.Context, resource models.Resource, 
 		"resource": resource,
 	})
 
-	return true
+	return false
 }
 
 func (c *Controller) handleStatusUpdate(
