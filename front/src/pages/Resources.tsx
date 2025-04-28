@@ -5,7 +5,7 @@ import {
   ResourceList,
   ResourceModal,
   ResourceUploadForm
-} from '@components/resources';
+} from '@components';
 import { Box, useTheme, useMediaQuery } from '@mui/material';
 
 export default function ResourcesPage() {

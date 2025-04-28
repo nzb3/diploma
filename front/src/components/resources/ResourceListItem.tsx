@@ -55,11 +55,14 @@ export function ResourceListItem({
         <Paper
             elevation={1}
             sx={{
+                marginTop: '24px',
                 mb: 1,
+                border: '1px solid ' + theme.palette.divider,
                 borderRadius: 2,
                 overflow: 'hidden',
                 transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
                 '&:hover': {
+                    border: '1px solid ' + theme.palette.divider,
                     transform: 'translateY(-4px)',
                     boxShadow: '0 6px 24px rgba(0, 0, 0, 0.15)',
                 },

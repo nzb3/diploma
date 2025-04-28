@@ -1,7 +1,7 @@
 import { useRef, useEffect } from 'react';
 import { Box, Paper } from '@mui/material';
 import { FormatMessage } from './FormatMessage.tsx';
-import { Message } from '../types/api';
+import { Message } from '../../types/api';
 
 interface ChatMessagesProps {
   messages: Message[];
@@ -78,7 +78,6 @@ export function ChatMessages({ messages, openResourceModal }: ChatMessagesProps)
             </Paper>
           </Box>
         ))}
-        <div ref={messagesEndRef} />
       </Box>
     </Box>
   );

@@ -1,12 +1,13 @@
 import { useResourceModal } from '@/hooks';
-import { ChatMessages, ChatInput, ResourceModalView } from '@/components';
+import { ChatMessages, ChatInput } from '@/components';
+import { ResourceModal } from "@components";
 import { useChat } from '@/context';
 import { Box } from '@mui/material';
 
 export default function SearchPage() {
   const { messages, isLoading, submitQuestion, cancelGeneration } = useChat();
-  const { 
-    isResourceModalOpen, 
+  const {
+    isResourceModalOpen,
     selectedResource, 
     isLoadingResource, 
     openResourceModal, 
@@ -23,7 +24,6 @@ export default function SearchPage() {
         overflow: 'hidden'
       }}
     >
-      {/* Messages container - takes full available height and scrolls */}
       <Box sx={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
         <ChatMessages 
           messages={messages} 
@@ -31,7 +31,6 @@ export default function SearchPage() {
         />
       </Box>
       
-      {/* Input is positioned on top of the messages */}
       <Box sx={{ position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 100 }}>
         <ChatInput 
           onSubmit={submitQuestion} 
@@ -40,8 +39,8 @@ export default function SearchPage() {
         />
       </Box>
       
-      <ResourceModalView 
-        isOpen={isResourceModalOpen} 
+      <ResourceModal
+        isOpen={isResourceModalOpen}
         onClose={closeResourceModal} 
         resource={selectedResource} 
         isLoading={isLoadingResource} 
