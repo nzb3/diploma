@@ -20,6 +20,7 @@ type resourceService interface {
 	GetResources(ctx context.Context) ([]models.Resource, error)
 	GetResourceByID(ctx context.Context, resourceID uuid.UUID) (models.Resource, error)
 	DeleteResource(ctx context.Context, resourceID uuid.UUID) error
+	UpdateResource(ctx context.Context, resource models.Resource) (models.Resource, error)
 }
 
 type Controller struct {
@@ -39,21 +40,50 @@ func (c *Controller) RegisterRoutes(router *gin.RouterGroup) {
 	resourceGroup := router.Group("/resources", middleware.RequestLogger())
 	{
 		resourceGroup.POST("/", middleware.SSEHeadersMiddleware(), c.SaveResource())
+		resourceGroup.PATCH("/", c.UpdateResource())
 		resourceGroup.GET("/", c.GetResources())
 		resourceGroup.GET("/:id", c.GetResourceByID())
 		resourceGroup.DELETE("/:id", c.DeleteResource())
 	}
 }
 
-type SaveDocumentRequest struct {
+type UpdateResourceRequest struct {
+	ResourceID uuid.UUID `json:"id"`
+	Name       string    `json:"name,omitempty"`
+	Content    []byte    `json:"content,omitempty"`
+}
+
+func (c *Controller) UpdateResource() gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		var req UpdateResourceRequest
+		if err := ctx.ShouldBindJSON(&req); err != nil {
+			slog.Error("Error parsing request", "err", err)
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		resource := models.Resource{
+			ID:         req.ResourceID,
+			RawContent: req.Content,
+			Name:       req.Name,
+		}
+
+		resource, err := c.service.UpdateResource(ctx, resource)
+		if err != nil {
+			slog.Warn("Failed to update resource")
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		ctx.JSON(http.StatusOK, gin.H{"resource": resource})
+	}
+}
+
+type SaveResourceRequest struct {
 	Content []byte `binding:"required" json:"content"`
 	Type    string `binding:"required" json:"type"`
 	Name    string `json:"name"`
 	URL     string `json:"url"`
-}
-
-type SaveDocumentResponse struct {
-	Success bool `json:"success"`
 }
 
 func (c *Controller) SaveResource() gin.HandlerFunc {
@@ -62,7 +92,7 @@ func (c *Controller) SaveResource() gin.HandlerFunc {
 			"client", ctx.ClientIP(),
 			"content_type", ctx.ContentType())
 
-		req, ok := controllers.ValidateRequest[SaveDocumentRequest](ctx)
+		req, ok := controllers.ValidateRequest[SaveResourceRequest](ctx)
 		if !ok {
 			slog.Warn("Invalid save request")
 			return
