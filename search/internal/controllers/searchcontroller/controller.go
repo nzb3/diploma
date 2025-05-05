@@ -19,7 +19,7 @@ import (
 
 type searchService interface {
 	GetAnswer(ctx context.Context, question string) (models.SearchResult, error)
-	GetAnswerStream(ctx context.Context, question string) (<-chan models.SearchResult, <-chan []models.Reference, <-chan []byte, <-chan error)
+	GetAnswerStream(ctx context.Context, question string, numReferences int) (<-chan models.SearchResult, <-chan []models.Reference, <-chan []byte, <-chan error)
 	SemanticSearch(ctx context.Context, query string) ([]models.Reference, error)
 }
 
@@ -92,7 +92,20 @@ func (c *Controller) AskStream() gin.HandlerFunc {
 			ctx.JSON(http.StatusBadRequest, gin.H{"error": "question is required"})
 			return
 		}
-		slog.Info("Processing question", "question", question)
+
+		numReferences := 10
+		numReferencesStr := ctx.Query("num_references")
+		if numReferencesStr != "" {
+			var err error
+			numReferences, err = strconv.Atoi(numReferencesStr)
+			if err != nil {
+				slog.Error("Invalid num_references parameter", "error", err)
+				ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid num_references parameter: must be an integer"})
+				return
+			}
+		}
+
+		slog.Info("Processing question", "question", question, "num_references", numReferences)
 
 		processID, err := getProcessIDFromContext(ctx)
 		if err != nil {
@@ -104,9 +117,10 @@ func (c *Controller) AskStream() gin.HandlerFunc {
 		slog.Info("Starting stream processing",
 			"process_id", processID,
 			"question", question,
+			"num_references", numReferences,
 			"client", ctx.ClientIP())
 
-		resultCh, referencesCh, chunkCh, errCh := c.searchService.GetAnswerStream(ctx, question)
+		resultCh, referencesCh, chunkCh, errCh := c.searchService.GetAnswerStream(ctx, question, numReferences)
 
 		ctx.Stream(func(w io.Writer) bool {
 			select {

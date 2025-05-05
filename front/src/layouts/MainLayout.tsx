@@ -40,7 +40,6 @@ export function MainLayout({ children }: MainLayoutProps) {
 
     const isActive = (path: string) => location.pathname === path;
 
-    // Navigation items definition
     const navItems = [
         { text: 'Search', icon: <SearchIcon />, path: '/' },
         { text: 'Resources', icon: <FolderIcon />, path: '/resources' },
@@ -72,7 +71,7 @@ export function MainLayout({ children }: MainLayoutProps) {
                             display: 'flex',
                             justifyContent: 'space-between',
                             px: { xs: 1, sm: 2 },
-                            minHeight: { xs: 56, sm: 64 } // Ensure consistent height across devices
+                            minHeight: { xs: 56, sm: 64 }
                         }}
                     >
                         {/* Logo - Always visible */}
@@ -132,7 +131,7 @@ export function MainLayout({ children }: MainLayoutProps) {
                                     sx={{
                                         ml: 1,
                                         color: 'text.secondary',
-                                        flexShrink: 0 // Prevent shrinking
+                                        flexShrink: 0
                                     }}
                                 >
                                     <MenuIcon />

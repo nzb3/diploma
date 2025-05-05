@@ -1,16 +1,17 @@
 import { useState } from 'react';
-import { Box, TextField, Button, Paper } from '@mui/material';
+import { Box, TextField, Button, Paper, Select, MenuItem, FormControl, InputLabel } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
 import StopIcon from '@mui/icons-material/Stop';
 
 interface ChatInputProps {
-  onSubmit: (question: string) => Promise<void>;
+  onSubmit: (question: string, numReferences: number) => Promise<void>;
   onCancel: () => Promise<void>;
   isLoading: boolean;
 }
 
 export function ChatInput({ onSubmit, onCancel, isLoading }: ChatInputProps) {
   const [input, setInput] = useState('');
+  const [numReferences, setNumReferences] = useState<number>(5);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -18,7 +19,7 @@ export function ChatInput({ onSubmit, onCancel, isLoading }: ChatInputProps) {
     
     const question = input.trim();
     setInput('');
-    await onSubmit(question);
+    await onSubmit(question, numReferences);
   };
 
   return (
@@ -86,6 +87,23 @@ export function ChatInput({ onSubmit, onCancel, isLoading }: ChatInputProps) {
             }
           }}
         />
+        <FormControl sx={{ minWidth: 100 }} size="small">
+          <InputLabel id="references-label">References</InputLabel>
+          <Select
+            labelId="references-label"
+            value={numReferences}
+            label="References"
+            onChange={(e) => setNumReferences(Number(e.target.value))}
+            disabled={isLoading}
+            sx={{ borderRadius: 1.5 }}
+          >
+            <MenuItem value={3}>3</MenuItem>
+            <MenuItem value={5}>5</MenuItem>
+            <MenuItem value={10}>10</MenuItem>
+            <MenuItem value={15}>15</MenuItem>
+            <MenuItem value={20}>20</MenuItem>
+          </Select>
+        </FormControl>
         {isLoading ? (
           <Button
             variant="contained"

@@ -9,13 +9,11 @@ import ResourcesPage from '@pages/Resources';
 import React from 'react';
 import '@/App.css'
 
-// Auth-aware route component that renders content based on authentication status
 function AuthRoute({ element }: { element: React.ReactElement }) {
   const { isAuthenticated, isInitialized } = useAuth();
   
   if (isInitialized) {
     if (!isAuthenticated) {
-      // Render unauthorized page without changing URL
       return <UnauthorizedPage />;
     }
 
@@ -23,7 +21,6 @@ function AuthRoute({ element }: { element: React.ReactElement }) {
   }
 }
 
-// Root route that conditionally renders landing page or search page
 function RootRoute() {
   const { isAuthenticated, isInitialized } = useAuth();
   

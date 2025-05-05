@@ -2,20 +2,18 @@ import { createContext, useContext, useState, useRef, ReactNode, useEffect, useC
 import { streamAnswer, cancelStream } from '../services/api';
 import { Message, CompleteResult, Reference } from '../types/api';
 
-// For handling HTML preservation
 const decodeHtmlEntities = (html: string): string => {
   const textArea = document.createElement('textarea');
   textArea.innerHTML = html;
   return textArea.value;
 };
 
-// Configuration
-const SSE_TIMEOUT = 10000; // 10 seconds timeout for SSE connections without activity
+const SSE_TIMEOUT = 20000;
 
 interface ChatContextType {
   messages: Message[];
   isLoading: boolean;
-  submitQuestion: (question: string) => Promise<void>;
+  submitQuestion: (question: string, numReferences?: number) => Promise<void>;
   cancelGeneration: () => Promise<void>;
   decodeHtmlEntities: (text: string) => string;
 }
@@ -81,7 +79,7 @@ export function ChatProvider({ children }: ChatProviderProps) {
     }, SSE_TIMEOUT);
   }, [isLoading, cleanupConnection]);
 
-  const submitQuestion = async (question: string) => {
+  const submitQuestion = async (question: string, numReferences: number = 5) => {
     if (!question.trim() || isLoading) return;
 
     hasReceivedData.current = false;
@@ -101,7 +99,7 @@ export function ChatProvider({ children }: ChatProviderProps) {
         eventSourceRef.current = null;
       }
 
-      const eventSource = await streamAnswer(question);
+      const eventSource = await streamAnswer(question, numReferences);
       eventSourceRef.current = eventSource;
 
       eventSource.addEventListener('chunk', (event) => {

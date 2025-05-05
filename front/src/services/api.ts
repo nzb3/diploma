@@ -105,8 +105,11 @@ export const askQuestion = async (data: AskRequest): Promise<AskResponse> => {
   return response.data;
 };
 
-export const streamAnswer = async (question: string): Promise<EventSource> => {
-  const queryParams = new URLSearchParams({ question });
+export const streamAnswer = async (question: string, numReferences: number = 5): Promise<EventSource> => {
+  const queryParams = new URLSearchParams({ 
+    question,
+    num_references: numReferences.toString()
+  });
   
   return createSSEConnection(`/ask/stream?${queryParams.toString()}`);
 };

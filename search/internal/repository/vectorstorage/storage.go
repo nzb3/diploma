@@ -20,6 +20,7 @@ import (
 
 	"github.com/nzb3/diploma/search/internal/controllers/middleware"
 	"github.com/nzb3/diploma/search/internal/domain/models"
+	"github.com/nzb3/diploma/search/internal/domain/services/searchservice"
 	"github.com/nzb3/diploma/search/internal/repository/vectorstorage/callback"
 )
 
@@ -199,16 +200,28 @@ func (s *VectorStorage) GetAnswer(ctx context.Context, question string) (string,
 	}
 }
 
-func (s *VectorStorage) GetAnswerStream(ctx context.Context, question string) (<-chan string, <-chan []models.Reference, <-chan []byte, <-chan error) {
+func (s *VectorStorage) GetAnswerStream(ctx context.Context, question string, opts ...searchservice.SearchOption) (<-chan string, <-chan []models.Reference, <-chan []byte, <-chan error) {
 	const op = "VectorStorage.GetAnswerStream"
 	slog.DebugContext(ctx, "Starting answer streaming", "question", question)
 
 	chunkCh := make(chan []byte, 1)
 
+	options := &searchservice.SearchOptions{
+		NumberOfReferences: s.cfg.NumOfResults,
+	}
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	slog.DebugContext(ctx, "Configured answer stream",
+		"question", question,
+		"num_references", options.NumberOfReferences)
+
 	answerCh, refsCh, errCh, doneCh := s.ask(
 		ctx,
 		question,
 		chains.WithStreamingFunc(newChunkHandler(chunkCh)),
+		searchservice.WithNumberOfReferences(options.NumberOfReferences),
 	)
 
 	go func() {
@@ -236,9 +249,23 @@ func newChunkHandler(chunkCh chan<- []byte) func(ctx context.Context, chunk []by
 	}
 }
 
-func (s *VectorStorage) ask(ctx context.Context, question string, opts ...chains.ChainCallOption) (<-chan string, <-chan []models.Reference, <-chan error, <-chan struct{}) {
+func (s *VectorStorage) ask(ctx context.Context, question string, opts ...interface{}) (<-chan string, <-chan []models.Reference, <-chan error, <-chan struct{}) {
 	const op = "VectorStorage.ask"
 	slog.DebugContext(ctx, "Processing question", "question", question)
+
+	var chainOpts []chains.ChainCallOption
+	numOfResults := s.cfg.NumOfResults
+
+	for _, opt := range opts {
+		switch o := opt.(type) {
+		case chains.ChainCallOption:
+			chainOpts = append(chainOpts, o)
+		case searchservice.SearchOption:
+			sOpts := &searchservice.SearchOptions{NumberOfReferences: s.cfg.NumOfResults}
+			o(sOpts)
+			numOfResults = sOpts.NumberOfReferences
+		}
+	}
 
 	refsCh := make(chan []models.Reference)
 	answerCh := make(chan string)
@@ -268,9 +295,9 @@ func (s *VectorStorage) ask(ctx context.Context, question string, opts ...chains
 			userIDFilter: userID,
 		}
 
-		retriever := s.setupRetriever(filters, cb)
+		retriever := s.setupRetriever(filters, numOfResults, cb)
 		retrievalQAChain := s.setupRetrievalQA(retriever)
-		opts = append(opts, chains.WithMaxTokens(s.cfg.MaxTokens), chains.WithCallback(cb))
+		chainOpts = append(chainOpts, chains.WithMaxTokens(s.cfg.MaxTokens), chains.WithCallback(cb))
 
 		select {
 		case <-ctx.Done():
@@ -281,7 +308,7 @@ func (s *VectorStorage) ask(ctx context.Context, question string, opts ...chains
 				ctx,
 				retrievalQAChain,
 				question,
-				opts...,
+				chainOpts...,
 			)
 			if err != nil {
 				errCh <- fmt.Errorf("%s:%w", op, err)
@@ -317,10 +344,10 @@ func getUserID(ctx context.Context) (string, error) {
 	return userID, nil
 }
 
-func (s *VectorStorage) setupRetriever(filters map[string]interface{}, callbackHandler ...*callback.Handler) *vectorstores.Retriever {
+func (s *VectorStorage) setupRetriever(filters map[string]interface{}, numResults int, callbackHandler ...*callback.Handler) *vectorstores.Retriever {
 	slog.DebugContext(context.Background(), "Configuring retriever",
-		"num_results", s.cfg.NumOfResults)
-	retriever := vectorstores.ToRetriever(s.vectorStore, s.cfg.NumOfResults, vectorstores.WithFilters(filters))
+		"num_results", numResults)
+	retriever := vectorstores.ToRetriever(s.vectorStore, numResults, vectorstores.WithFilters(filters))
 	if len(callbackHandler) > 0 {
 		retriever.CallbacksHandler = callbackHandler[0]
 	}
@@ -347,7 +374,6 @@ func parseReferences(docs []schema.Document) []models.Reference {
 }
 
 func clearText(text string) string {
-	// Regex matches ![alt](url), including empty alt and data URLs
 	re := regexp.MustCompile(`!\[[^\]]*\]\([^)]+\)`)
 	return re.ReplaceAllString(text, "")
 }

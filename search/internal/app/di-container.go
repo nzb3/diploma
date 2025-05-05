@@ -148,14 +148,38 @@ func (sp *ServiceProvider) AuthConfig(ctx context.Context) *middleware.AuthMiddl
 		return sp.authConfig
 	}
 
-	// Get values from environment or use defaults
-	// In production, these should be loaded from configuration files or environment variables
+	host := os.Getenv("AUTH_HOST")
+	if host == "" {
+		slog.Error("AUTH_HOST environment variable not set")
+		return nil
+	}
+	port := os.Getenv("AUTH_PORT")
+	if port == "" {
+		slog.Error("AUTH_PORT environment variable not set")
+		return nil
+	}
+	realm := os.Getenv("AUTH_REALM")
+	if realm == "" {
+		slog.Error("AUTH_REALM environment variable not set")
+		return nil
+	}
+	clientID := os.Getenv("AUTH_CLIENT_ID")
+	if clientID == "" {
+		slog.Error("AUTH_CLIENT_ID environment variable not set")
+		return nil
+	}
+	clientSecret := os.Getenv("AUTH_CLIENT_SECRET")
+	if clientSecret == "" {
+		slog.Error("AUTH_CLIENT_SECRET environment variable not set")
+		return nil
+	}
+
 	sp.authConfig = &middleware.AuthMiddlewareConfig{
-		Host:         "auth",
-		Port:         "8080",
-		Realm:        "deltanotes",
-		ClientID:     "deltanotes-backend",
-		ClientSecret: "jjNv3RHONkIPYA1rKblKWC1rEBe12UG4",
+		Host:         host,
+		Port:         port,
+		Realm:        realm,
+		ClientID:     clientID,
+		ClientSecret: clientSecret,
 	}
 
 	return sp.authConfig
@@ -169,7 +193,6 @@ func (sp *ServiceProvider) GinEngine(ctx context.Context) *gin.Engine {
 	_ = ctx
 	engine := gin.Default()
 
-	// Configure CORS to allow frontend requests
 	corsConfig := cors.Config{
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},

@@ -7,7 +7,7 @@ import (
 )
 
 type ResourceEmbedding struct {
-	ResourceID  uuid.UUID `gorm:"type:uuid;primaryKey;column:resource_id" json:"resource_id"` // Matches schema spelling
+	ResourceID  uuid.UUID `gorm:"type:uuid;primaryKey;column:resource_id" json:"resource_id"`
 	EmbeddingID uuid.UUID `gorm:"type:uuid;primaryKey;unique;column:embedding_id" json:"embedding_id"`
 }
 

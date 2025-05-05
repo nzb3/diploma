@@ -10,9 +10,21 @@ import (
 	"github.com/nzb3/diploma/search/internal/domain/models"
 )
 
+type SearchOption func(*SearchOptions)
+
+type SearchOptions struct {
+	NumberOfReferences int
+}
+
+func WithNumberOfReferences(n int) SearchOption {
+	return func(o *SearchOptions) {
+		o.NumberOfReferences = n
+	}
+}
+
 type vectorStorage interface {
 	GetAnswer(ctx context.Context, question string) (string, []models.Reference, error)
-	GetAnswerStream(ctx context.Context, question string) (<-chan string, <-chan []models.Reference, <-chan []byte, <-chan error)
+	GetAnswerStream(ctx context.Context, question string, opts ...SearchOption) (<-chan string, <-chan []models.Reference, <-chan []byte, <-chan error)
 	SemanticSearch(ctx context.Context, query string) ([]models.Reference, error)
 }
 
@@ -32,7 +44,11 @@ func NewService(vs vectorStorage, r repository) *Service {
 	return &Service{vectorStorage: vs, repository: r}
 }
 
-func (s *Service) GetAnswerStream(ctx context.Context, question string) (
+func (s *Service) GetAnswerStream(
+	ctx context.Context,
+	question string,
+	numReferences int,
+) (
 	<-chan models.SearchResult,
 	<-chan []models.Reference,
 	<-chan []byte,
@@ -44,7 +60,12 @@ func (s *Service) GetAnswerStream(ctx context.Context, question string) (
 	refsOutputCh := make(chan []models.Reference)
 	searchResultOutputCh := make(chan models.SearchResult)
 
-	answerCh, rawRefsCh, chunkCh, getAnswerErrCh := s.vectorStorage.GetAnswerStream(ctx, question)
+	answerCh, rawRefsCh, chunkCh, getAnswerErrCh := s.vectorStorage.GetAnswerStream(
+		ctx,
+		question,
+		WithNumberOfReferences(numReferences),
+	)
+
 	go func() {
 		defer func() {
 			close(refsOutputCh)

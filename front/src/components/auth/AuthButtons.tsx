@@ -26,7 +26,6 @@ export function AuthButtons() {
     navigate('/');
   };
 
-  // Show user profile when authenticated
   if (isAuthenticated) {
     return (
       <Box sx={{ display: 'flex', alignItems: 'center' }}>
@@ -81,7 +80,6 @@ export function AuthButtons() {
     );
   }
 
-  // Show login and register buttons when not authenticated
   return (
     <Box sx={{ display: 'flex', gap: 1 }}>
       <Button

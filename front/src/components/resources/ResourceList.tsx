@@ -38,7 +38,6 @@ export function ResourceList({
   const [showLegend, setShowLegend] = useState(false);
   const theme = useTheme();
 
-  // Ensure resources is always an array
   const safeResources = Array.isArray(resources) ? resources : [];
 
   const getStatusColor = (status: string) => {
@@ -96,8 +95,8 @@ export function ResourceList({
         <CardContent
             sx={{
               padding: theme.spacing(2, 2, 0, 2),
-              paddingBottom: '0 !important', // Override Material UI's last child padding
-              flexShrink: 0 // Prevents this section from shrinking
+              paddingBottom: '0 !important',
+              flexShrink: 0
             }}
         >
           <Box display="flex" justifyContent="space-between" alignItems="center">
@@ -145,12 +144,10 @@ export function ResourceList({
               sx={{
                 overflowY: 'auto',
                 flexGrow: 1,
-                // Calculate appropriate height for mobile vs desktop
                 maxHeight: {
                   xs: safeResources.length > 0 ? '60vh' : 'auto',
                   sm: '100%'
                 },
-                // Add styled scrollbar
                 '&::-webkit-scrollbar': {
                   width: '8px',
                   height: '8px',

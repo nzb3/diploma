@@ -35,7 +35,6 @@ export function ResourceListItem({
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('lg'));
 
-    // Get color for resource type
     const getTypeIcon = () => {
         switch (resource.type) {
             case 'pdf':

@@ -27,6 +27,8 @@ services:
       target: release
       dockerfile: Dockerfile
     container_name: search
+    env_file:
+      - search/.env
     ports:
       - "8081:8081"
     depends_on:

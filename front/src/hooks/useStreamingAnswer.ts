@@ -19,32 +19,27 @@ export function useStreamingAnswer(): UseStreamingAnswerResult {
   const handleSubmitQuestion = async (question: string) => {
     if (!question.trim() || isLoading) return;
 
-    // Reset the data received flag and current answer
     hasReceivedData.current = false;
     currentAnswerRef.current = '';
     
     setMessages(prev => [...prev, { role: 'user', content: question }]);
     setIsLoading(true);
     
-    // Create a reference to the event source that we can close later
     let eventSource: EventSource | null = null;
 
     try {
       console.log('Starting streaming with question:', question);
       
-      // Add an initial empty assistant message that we'll update
       setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
       
       eventSource = await streamAnswer(question);
 
-      // Listen for chunk events
       eventSource.addEventListener('chunk', (event) => {
         console.log('Chunk event received:', event.data);
         try {
           const data = JSON.parse(event.data);
           console.log('Parsed chunk data:', data);
           
-          // Mark that we've received at least one message
           hasReceivedData.current = true;
           
           if (data.content) {
@@ -55,11 +50,9 @@ export function useStreamingAnswer(): UseStreamingAnswerResult {
               setCurrentProcessId(data.process_id);
             }
             
-            // Update the current answer with new content
             currentAnswerRef.current += data.content;
             console.log('Current answer:', currentAnswerRef.current);
             
-            // Update the assistant message
             setMessages(prev => {
               const newMessages = [...prev];
               const lastMessage = newMessages[newMessages.length - 1];
@@ -76,21 +69,18 @@ export function useStreamingAnswer(): UseStreamingAnswerResult {
         }
       });
 
-      // Listen for complete events
       eventSource.addEventListener('complete', (event) => {
         console.log('Complete event received:', event.data);
         try {
           const data = JSON.parse(event.data);
           console.log('Parsed complete data:', data);
           
-          // Handle successful completion
           if (data.complete === true && data.result) {
             console.log('Stream completed with result:', data.result);
             
             const result = data.result as CompleteResult;
             let formattedAnswer = result.answer;
             
-            // Add references if they exist
             if (result.references && result.references.length > 0) {
               formattedAnswer += '\n\nReferences:';
               
@@ -101,7 +91,6 @@ export function useStreamingAnswer(): UseStreamingAnswerResult {
               });
             }
             
-            // Update the assistant message
             setMessages(prev => {
               const newMessages = [...prev];
               const lastMessage = newMessages[newMessages.length - 1];
@@ -125,7 +114,6 @@ export function useStreamingAnswer(): UseStreamingAnswerResult {
         }
       });
 
-      // Listen for error events
       eventSource.addEventListener('error', (error) => {
         console.error('Error event received:', error);
         
@@ -136,9 +124,7 @@ export function useStreamingAnswer(): UseStreamingAnswerResult {
           eventSource = null;
         }
         
-        // Only show the error message if we haven't received any data yet
         if (!hasReceivedData.current) {
-          // Update the last message with the error
           setMessages(prev => {
             const newMessages = [...prev];
             const lastMessage = newMessages[newMessages.length - 1];
@@ -160,7 +146,6 @@ export function useStreamingAnswer(): UseStreamingAnswerResult {
         eventSource.close();
       }
       
-      // Create or update the assistant message
       setMessages(prev => {
         const newMessages = [...prev];
         const lastMessage = newMessages[newMessages.length - 1];

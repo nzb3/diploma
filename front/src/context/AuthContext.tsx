@@ -40,15 +40,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
     initAuth();
   }, []);
 
-  // Set up token refresh
   useEffect(() => {
     if (isAuthenticated) {
       const interval = setInterval(() => {
         authService.updateToken(70).catch(() => {
-          // If token refresh fails, log the user out
           setIsAuthenticated(false);
         });
-      }, 60000); // Check token every minute
+      }, 60000);
 
       return () => clearInterval(interval);
     }
