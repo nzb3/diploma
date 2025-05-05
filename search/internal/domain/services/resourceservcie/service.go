@@ -162,13 +162,18 @@ func (s *Service) GetResourceByID(ctx context.Context, resourceID uuid.UUID) (mo
 	return *resource, nil
 }
 
-func (s *Service) UpdateResource(ctx context.Context, resource models.Resource) (models.Resource, error) {
-	const op = "Service.UpdateResource"
-	slog.DebugContext(ctx, "Processing update request",
-		"resource_id", resource.ID,
-	)
+func (s *Service) provideResourceWithOwnerID(ctx context.Context, resource models.Resource) (models.Resource, error) {
+	const op = "Service.provideResourceWithOwnerID"
 
-	err := s.checkOwnership(ctx, resource.ID, resource.OwnerID)
+	userID, err := getUserID(ctx)
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to get user ID",
+			"op", op,
+			"error", err)
+		return models.Resource{}, fmt.Errorf("%s: %w", op, err)
+	}
+
+	err = s.checkOwnership(ctx, resource.ID, userID)
 	if err != nil {
 		slog.ErrorContext(ctx, "Failed to update resource",
 			"op", op,
@@ -178,6 +183,62 @@ func (s *Service) UpdateResource(ctx context.Context, resource models.Resource) 
 		)
 		return models.Resource{}, fmt.Errorf("%s: %w", op, err)
 	}
+
+	resource.OwnerID = userID
+
+	return resource, nil
+}
+
+// UpdateResource method for update resource if needed changing of content starts processing
+func (s *Service) UpdateResource(ctx context.Context, resource models.Resource) (models.Resource, error) {
+	const op = "Service.UpdateResource"
+	slog.DebugContext(ctx, "Updating resource",
+		"resource", resource,
+		"resource_id", resource.ID,
+	)
+
+	err := resource.Validate(resource.HaveID())
+	if err != nil {
+		return models.Resource{}, fmt.Errorf("%s: %w", op, err)
+	}
+
+	resource, err = s.provideResourceWithOwnerID(ctx, resource)
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to update resource",
+			"resource", resource,
+			"resource_id", resource.ID,
+			"error", err,
+		)
+		return models.Resource{}, fmt.Errorf("%s: %w", op, err)
+	}
+
+	if len(resource.RawContent) != 0 {
+		resource, err = s.resourceProcessor.ExtractContent(ctx, resource)
+		if err != nil {
+			return models.Resource{}, fmt.Errorf("%s: %w", op, err)
+		}
+
+		s.runProcessingPipeline(ctx, resource)
+	}
+
+	resource, err = s.updateResource(ctx, resource)
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to update resource",
+			"resource", resource,
+			"resource_id", resource.ID,
+			"error", err,
+		)
+		return models.Resource{}, fmt.Errorf("%s: %w", op, err)
+	}
+
+	return resource, nil
+}
+
+func (s *Service) updateResource(ctx context.Context, resource models.Resource) (models.Resource, error) {
+	const op = "Service.updateResource"
+	slog.DebugContext(ctx, "Processing update request",
+		"resource_id", resource.ID,
+	)
 
 	updatedResource, err := s.resourceRepo.UpdateResource(ctx, resource)
 	if err != nil {
@@ -246,35 +307,6 @@ func (s *Service) SaveResource(ctx context.Context, resource models.Resource) (<
 	return resourceCh, statusUpdateCh, errCh
 }
 
-func (s *Service) cleanupProcess(ctx context.Context, resourceID uuid.UUID) error {
-	const op = "Service.cleanupProcess"
-
-	slog.DebugContext(ctx, "Processing cleanup",
-		"resource_id", resourceID,
-	)
-
-	if resourceID == uuid.Nil {
-		return nil
-	}
-
-	err := s.resourceRepo.DeleteResource(ctx, resourceID)
-	if err != nil {
-		slog.ErrorContext(ctx, "Failed to delete resource",
-			"op", op,
-			"resource_id", resourceID,
-			"error", err,
-		)
-
-		return fmt.Errorf("%s: %w", op, err)
-	}
-
-	slog.InfoContext(ctx, "Successfully deleted resource",
-		"resource_id", resourceID,
-	)
-
-	return nil
-}
-
 func (s *Service) runSaveResourcePipeline(ctx context.Context, resource models.Resource) (models.Resource, error) {
 	const op = "Service.runSaveResourcePipeline"
 
@@ -293,6 +325,13 @@ func (s *Service) runSaveResourcePipeline(ctx context.Context, resource models.R
 		return models.Resource{}, fmt.Errorf("%s: %w", op, err)
 	}
 
+	s.runProcessingPipeline(ctx, resource)
+
+	return resource, nil
+}
+
+func (s *Service) runProcessingPipeline(ctx context.Context, resource models.Resource) {
+	const op = "Service.runProcessingPipeline"
 	ctx, cancel := context.WithTimeout(
 		context.WithValue(
 			context.Background(),
@@ -302,13 +341,23 @@ func (s *Service) runSaveResourcePipeline(ctx context.Context, resource models.R
 	go func() {
 		defer cancel()
 
-		resourceID := resource.ID
+		var err error
+
+		if resource.Status != models.ResourceStatusProcessing {
+			resource, err = s.UpdateResourceStatus(ctx, resource, models.ResourceStatusProcessing)
+			if err != nil {
+				slog.ErrorContext(ctx, "Failed to update resource",
+					"op", op,
+					"resource_id", resource.ID,
+					"error", err,
+				)
+			}
+		}
 
 		resource, err = s.processResource(ctx, resource)
 		if err != nil {
 			slog.ErrorContext(ctx, "Failed to process resource",
 				"op", op,
-				"resource_id", resourceID,
 				"error", err,
 			)
 
@@ -316,7 +365,6 @@ func (s *Service) runSaveResourcePipeline(ctx context.Context, resource models.R
 			if updateStatusErr != nil {
 				slog.ErrorContext(ctx, "Failed to update resource",
 					"op", op,
-					"resource_id", resourceID,
 					"error", errors.Join(err, updateStatusErr),
 				)
 				return
@@ -324,8 +372,6 @@ func (s *Service) runSaveResourcePipeline(ctx context.Context, resource models.R
 			return
 		}
 	}()
-
-	return resource, nil
 }
 
 func (s *Service) processResource(ctx context.Context, resource models.Resource) (models.Resource, error) {
@@ -347,7 +393,7 @@ func (s *Service) processResource(ctx context.Context, resource models.Resource)
 			return models.Resource{}, fmt.Errorf("%s: %w", op, err)
 		}
 
-		resource, err = s.UpdateResource(ctx, resource)
+		resource, err = s.updateResource(ctx, resource)
 		if err != nil {
 			slog.ErrorContext(ctx, "Failed to update resource",
 				"op", op,
@@ -407,18 +453,9 @@ func (s *Service) saveResource(ctx context.Context, resource models.Resource) (m
 			return models.Resource{}, err
 		}
 
-		resource, err = s.UpdateResourceStatus(ctx, *savedResource, models.ResourceStatusProcessing)
-		if err != nil {
-			slog.ErrorContext(ctx, "Failed to update resource",
-				"op", op,
-				"resource_id", resource.ID,
-				"error", err,
-			)
-		}
-
 		slog.DebugContext(ctx, "Resource saved successfully",
 			"resource_id", savedResource.ID)
-		return resource, nil
+		return *savedResource, nil
 	}
 }
 
@@ -431,7 +468,7 @@ func (s *Service) UpdateResourceStatus(
 
 	resource.Status = status
 
-	resource, err := s.UpdateResource(ctx, resource)
+	resource, err := s.updateResource(ctx, resource)
 	if err != nil {
 		slog.ErrorContext(ctx, "Failed to update resource",
 			"error", err,

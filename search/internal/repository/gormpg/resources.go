@@ -102,12 +102,55 @@ func (r *Repository) SaveResource(ctx context.Context, resource models.Resource)
 
 // UpdateResource updates an existing resource in the database
 func (r *Repository) UpdateResource(ctx context.Context, resource models.Resource) (*models.Resource, error) {
-	const op = "Repository.UpdateResource"
+	const op = "Repository.updateResource"
 
-	if err := r.db.WithContext(ctx).Save(&resource).Error; err != nil {
+	updates := map[string]interface{}{}
+
+	if resource.Name != "" {
+		updates["name"] = resource.Name
+	}
+	if resource.Type != "" {
+		updates["type"] = resource.Type
+	}
+	if resource.URL != "" {
+		updates["url"] = resource.URL
+	}
+	if resource.ExtractedContent != "" {
+		updates["extracted_content"] = resource.ExtractedContent
+	}
+	if len(resource.RawContent) > 0 {
+		updates["raw_content"] = resource.RawContent
+	}
+	if resource.Status != "" {
+		updates["status"] = resource.Status
+	}
+	if resource.OwnerID != "" {
+		updates["owner_id"] = resource.OwnerID
+	}
+
+	if len(updates) == 0 {
+		var currentResource models.Resource
+		if err := r.db.WithContext(ctx).First(&currentResource, resource.ID).Error; err != nil {
+			return nil, fmt.Errorf("%s: %w", op, err)
+		}
+		return &currentResource, nil
+	}
+
+	resourceToUpdate := models.Resource{
+		ID:       resource.ID,
+		ChunkIDs: resource.ChunkIDs,
+	}
+
+	if err := r.db.WithContext(ctx).Model(&resourceToUpdate).Updates(updates).Error; err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
-	return &resource, nil
+
+	var updatedResource models.Resource
+	if err := r.db.WithContext(ctx).First(&updatedResource, resource.ID).Error; err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+
+	return &updatedResource, nil
 }
 
 // DeleteResource deletes a resource by its ID

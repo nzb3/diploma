@@ -120,6 +120,24 @@ func (r *Resource) BeforeUpdate(tx *gorm.DB) error {
 	r.UpdatedAt = time.Now()
 	return tx.Transaction(func(tx *gorm.DB) error {
 		if len(r.ChunkIDs) != 0 {
+			var existingEmbeddingIDs []uuid.UUID
+			if err := tx.Model(&ResourceEmbedding{}).
+				Where("resource_id = ?", r.ID).
+				Pluck("embedding_id", &existingEmbeddingIDs).
+				Error; err != nil {
+				return fmt.Errorf("%s: finding existing embedding IDs: %w", op, err)
+			}
+
+			if len(existingEmbeddingIDs) > 0 {
+				if err := tx.Where("uuid IN ?", existingEmbeddingIDs).Delete(&Embedding{}).Error; err != nil {
+					return fmt.Errorf("%s: deleting existing embeddings: %w", op, err)
+				}
+			}
+
+			if err := tx.Where("resource_id = ?", r.ID).Delete(&ResourceEmbedding{}).Error; err != nil {
+				return fmt.Errorf("%s: deleting existing resource embedding associations: %w", op, err)
+			}
+
 			associations := make([]ResourceEmbedding, 0, len(r.ChunkIDs))
 			for _, chunkID := range r.ChunkIDs {
 				associations = append(associations, ResourceEmbedding{
@@ -129,7 +147,7 @@ func (r *Resource) BeforeUpdate(tx *gorm.DB) error {
 			}
 
 			if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&associations).Error; err != nil {
-				return fmt.Errorf("%s: %w", op, err)
+				return fmt.Errorf("%s: creating new resource embeddings: %w", op, err)
 			}
 		}
 		return nil
