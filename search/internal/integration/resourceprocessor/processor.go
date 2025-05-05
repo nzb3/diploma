@@ -70,14 +70,12 @@ func (p *ResourceProcessor) ProcessResource(ctx context.Context, resource models
 func (p *ResourceProcessor) ExtractContent(ctx context.Context, resource models.Resource) (models.Resource, error) {
 	const op = "ResourceProcessor.ExtractContent"
 	switch resource.Type {
-	case "text", "md", "markdown":
-		return p.extractText(ctx, resource)
 	case "url":
 		return p.extractContentURL(ctx, resource)
 	case "pdf":
 		return p.extractContentPDF(ctx, resource)
 	default:
-		return models.Resource{}, fmt.Errorf("unknown resource type: %s", resource.Type)
+		return p.extractText(ctx, resource)
 	}
 }
 
