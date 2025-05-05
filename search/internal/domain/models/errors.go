@@ -13,4 +13,5 @@ var (
 	ValidationErrorMissingType       ResourceValidationError = errors.New("type is missing")
 	ValidationErrorMissingRawContent ResourceValidationError = errors.New("raw_content is missing")
 	ValidationErrorMissingID         ResourceValidationError = errors.New("id is missing")
+	ValidationErrorMissingOwnerID    ResourceValidationError = errors.New("owner is missing")
 )

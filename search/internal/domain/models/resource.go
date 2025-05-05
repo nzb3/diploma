@@ -1,6 +1,7 @@
 package models
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -9,6 +10,8 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+
+	"github.com/nzb3/diploma/search/internal/validator"
 )
 
 type ResourceType string
@@ -44,23 +47,30 @@ func (r *Resource) SetStatusCompleted() {
 	r.Status = ResourceStatusCompleted
 }
 
-func (r *Resource) Validate() error {
-	if r.ID == uuid.Nil {
-		return ValidationErrorMissingID
-	}
-	if r.Name == "" {
-		return ValidationErrorMissingName
-	}
-
-	if r.Type == "" {
-		return ValidationErrorMissingType
+func (r *Resource) Validate(validators ...validator.ValidateFunc[Resource]) error {
+	var err error
+	for _, fn := range validators {
+		if validationErr := fn(r); validationErr != nil {
+			err = errors.Join(err, validationErr)
+		}
 	}
 
-	if r.RawContent == nil {
-		return ValidationErrorMissingRawContent
+	if err != nil {
+		return err
 	}
 
 	return nil
+}
+
+func (r *Resource) HaveID() validator.ValidateFunc[Resource] {
+	return func(r *Resource) error {
+		if r.ID == uuid.Nil {
+			return ValidationErrorMissingID
+		}
+
+		return nil
+	}
+
 }
 
 func (r *Resource) TableName() string {
