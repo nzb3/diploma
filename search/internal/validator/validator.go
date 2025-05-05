@@ -4,12 +4,12 @@ import (
 	"fmt"
 )
 
-type Validator interface {
-	Validate() error
+type Validator[T any] interface {
+	Validate(validators ...ValidateFunc[T]) error
 }
 
 func Validate[T any](obj *T) error {
-	if validator, ok := any(obj).(Validator); ok {
+	if validator, ok := any(obj).(Validator[T]); ok {
 		if err := validator.Validate(); err != nil {
 			return fmt.Errorf("validation error: %w", err)
 		}
@@ -17,3 +17,5 @@ func Validate[T any](obj *T) error {
 
 	return nil
 }
+
+type ValidateFunc[T any] func(r *T) error
