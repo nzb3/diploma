@@ -3,8 +3,9 @@ import {
     getResources,
     saveResource,
     deleteResource as apiDeleteResource,
+    updateResource as apiUpdateResource,
 } from '../services/api';
-import { Resource, ResourceEvent, SaveDocumentRequest } from '../types/api';
+import {Resource, ResourceEvent, SaveDocumentRequest, UpdateResourceRequest} from '../types/api';
 
 interface UseResourceManagementResult {
     resources: Resource[];
@@ -14,6 +15,7 @@ interface UseResourceManagementResult {
     loadResources: () => Promise<void>;
     uploadResource: (data: SaveDocumentRequest) => Promise<void>;
     deleteResourceById: (id: string) => Promise<void>;
+    updateResourceById: (data: UpdateResourceRequest) => Promise<Resource>;
     refreshResources: () => Promise<void>;
 }
 
@@ -94,7 +96,27 @@ export function useResourceManagement(): UseResourceManagementResult {
         }
     }, []);
 
-    // Alias for clarity
+    const updateResourceById = useCallback(async (data: UpdateResourceRequest)=> {
+        try {
+           const resource = await apiUpdateResource(data);
+           setResources(prev => {
+               if (Array.isArray(prev)) {
+                   const resourceIndex = prev.findIndex(value => resource.id === value.id);
+                   if (resourceIndex !== -1) {
+                       const updatedResources = [...prev];
+                       updatedResources[resourceIndex] = resource;
+                       return updatedResources;
+                   }
+               }
+               return prev;
+           });
+           return resource;
+        } catch (error) {
+            console.error('Failed to update resource:', error);
+            throw error;
+        }
+    }, [])
+
     const refreshResources = loadResources;
 
     return {
@@ -106,5 +128,6 @@ export function useResourceManagement(): UseResourceManagementResult {
         uploadResource,
         deleteResourceById,
         refreshResources,
+        updateResourceById,
     };
 }

@@ -71,4 +71,10 @@ export interface SaveDocumentRequest {
   type: string;
   content: string;
   url?: string;
-} 
+}
+
+export interface UpdateResourceRequest {
+  id?: string;
+  name?: string;
+  content?: string;
+}

@@ -1,5 +1,5 @@
 import axios from 'axios';
-import {AskRequest, AskResponse, Resource, SaveDocumentRequest} from '../types/api';
+import {AskRequest, AskResponse, Resource, SaveDocumentRequest, UpdateResourceRequest} from '../types/api';
 import authService from './authService';
 
 const API_BASE_URL = '/api/v1';
@@ -26,7 +26,6 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Add interceptor to handle 401/403 responses
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -58,21 +57,19 @@ api.interceptors.response.use(
   }
 );
 
-// Helper function to create an EventSource that works with interceptors
 const createSSEConnection = async (url: string): Promise<EventSource> => {
-  // First, apply the same authentication logic from interceptors
   const fullUrl = `${window.location.origin}${API_BASE_URL}${url}`;
   const urlObj = new URL(fullUrl);
   
   if (authService.isAuthenticated()) {
     const token = authService.getToken();
     if (token) {
-      // Add token as URL parameter so EventSource can use it
       urlObj.searchParams.append('auth_token', token);
     }
   }
   
-  // Create a native EventSource with the authenticated URL
+  urlObj.searchParams.append('accept', 'text/event-stream');
+  
   return new EventSource(urlObj.toString(), {
     withCredentials: true
   });
@@ -92,11 +89,14 @@ export const deleteResource = async (id: string): Promise<void> => {
   await api.delete(`/resources/${id}`);
 };
 
+export const updateResource = async (data: UpdateResourceRequest): Promise<Resource> => {
+  const response = await api.patch(`/resources`, data);
+  return response.data;
+}
+
 export const saveResource = async (data: SaveDocumentRequest): Promise<EventSource> => {
-  // First, upload the resource
   await api.post('/resources', data);
   
-  // Then create SSE connection to track processing
   return createSSEConnection('/resources');
 };
 
@@ -106,7 +106,6 @@ export const askQuestion = async (data: AskRequest): Promise<AskResponse> => {
 };
 
 export const streamAnswer = async (question: string): Promise<EventSource> => {
-  // Create a combined endpoint that handles both posting the question and streaming the answer
   const queryParams = new URLSearchParams({ question });
   
   return createSSEConnection(`/ask/stream?${queryParams.toString()}`);
