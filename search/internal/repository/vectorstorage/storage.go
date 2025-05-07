@@ -13,6 +13,7 @@ import (
 	"github.com/tmc/langchaingo/documentloaders"
 	"github.com/tmc/langchaingo/embeddings"
 	"github.com/tmc/langchaingo/llms"
+	"github.com/tmc/langchaingo/prompts"
 	"github.com/tmc/langchaingo/schema"
 	"github.com/tmc/langchaingo/textsplitter"
 	"github.com/tmc/langchaingo/vectorstores"
@@ -54,10 +55,7 @@ func NewVectorStorage(ctx context.Context, cfg *Config, embedder embeddings.Embe
 			"error", err)
 		return nil, fmt.Errorf("%s:%w", op, err)
 	}
-
-	slog.DebugContext(ctx, "Vector storage initialized",
-		"collection_table", "collections",
-		"embedding_table", "embeddings")
+	slog.DebugContext(ctx, "Vector storage initialized")
 	return &VectorStorage{
 		vectorStore: &store,
 		embedder:    embedder,
@@ -356,10 +354,19 @@ func (s *VectorStorage) setupRetriever(filters map[string]interface{}, numResult
 
 func (s *VectorStorage) setupRetrievalQA(retriever *vectorstores.Retriever) chains.RetrievalQA {
 	slog.DebugContext(context.Background(), "Initializing QA chain")
-	return chains.NewRetrievalQAFromLLM(
+	prompt := s.setupPrompt()
+
+	llmChain := chains.NewLLMChain(
 		s.generator,
+		prompt,
+	)
+
+	retrievalChain := chains.NewRetrievalQA(
+		chains.NewStuffDocuments(llmChain),
 		retriever,
 	)
+
+	return retrievalChain
 }
 
 func parseReferences(docs []schema.Document) []models.Reference {
@@ -376,4 +383,26 @@ func parseReferences(docs []schema.Document) []models.Reference {
 func clearText(text string) string {
 	re := regexp.MustCompile(`!\[[^\]]*\]\([^)]+\)`)
 	return re.ReplaceAllString(text, "")
+}
+
+func (s *VectorStorage) setupPrompt() prompts.PromptTemplate {
+	customPromptText := `Use the following pieces of context to answer the question at the end. If you don't know the answer, just say that you don't know, don't try to make up an answer
+
+{{.context}}
+
+Question: {{.question}}
+
+Helpful Answer:
+`
+
+	prompt := prompts.NewPromptTemplate(
+		customPromptText,
+		[]string{"context", "question"},
+	)
+
+	qaPromptSelector := chains.ConditionalPromptSelector{
+		DefaultPrompt: prompt,
+	}
+
+	return qaPromptSelector.GetPrompt(s.generator)
 }
