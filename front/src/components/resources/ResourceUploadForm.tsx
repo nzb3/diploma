@@ -84,6 +84,13 @@ export function ResourceUploadForm({ onUpload, isUploading }: ResourceUploadForm
   };
 
   const processFile = (file: File) => {
+    if (file.size > 4 * 1024 * 1024) {
+      alert('File should be up to 5MB');
+      setFileName('');
+      setContent('');
+      return;
+    }
+
     setFileName(file.name);
     const detectedType = detectFileType(file.name);
     const supportedTypes = ['pdf', 'markdown', 'txt'];
