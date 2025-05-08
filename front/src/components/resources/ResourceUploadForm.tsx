@@ -328,7 +328,7 @@ export function ResourceUploadForm({ onUpload, isUploading }: ResourceUploadForm
                     textAlign: 'center',
                     fontSize: { xs: '0.65rem', sm: '0.75rem' }
                   }}>
-                    PDF, Markdown, or Text files (up to 100MB)
+                    PDF, Markdown, or Text files (up to 5MB)
                   </Typography>
                   <input
                       ref={fileInputRef}
