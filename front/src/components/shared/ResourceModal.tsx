@@ -216,7 +216,7 @@ export function ResourceModal({
                     <CalendarTodayIcon fontSize="small" />
                     <Typography variant="body2">
                       Created: <Box component="span" sx={{ color: 'text.primary', fontWeight: 'medium' }}>
-                      {new Date(resource.created_at).toLocaleDateString()}
+                      {new Date(resource.created_at).toUTCString()}
                     </Box>
                     </Typography>
                   </Box>
@@ -224,7 +224,7 @@ export function ResourceModal({
                     <AccessTimeIcon fontSize="small" />
                     <Typography variant="body2">
                       Last Updated: <Box component="span" sx={{ color: 'text.primary', fontWeight: 'medium' }}>
-                      {new Date(resource.updated_at).toLocaleDateString()}
+                      {new Date(resource.updated_at).toUTCString()}
                     </Box>
                     </Typography>
                   </Box>
