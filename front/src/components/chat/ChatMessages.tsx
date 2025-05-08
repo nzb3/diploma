@@ -1,16 +1,20 @@
 import { useRef, useEffect } from 'react';
-import { Box, Paper } from '@mui/material';
+import { Box, Paper, useTheme, useMediaQuery, Chip, alpha } from '@mui/material';
 import { FormatMessage } from './FormatMessage.tsx';
 import { Message } from '../../types/api';
 import {SaveMessageAsResourceButton} from "@components/chat/SaveMessageAsResourceButton.tsx";
+import DoneAllIcon from '@mui/icons-material/DoneAll';
 
 interface ChatMessagesProps {
   messages: Message[];
   openResourceModal: (resourceId: string) => void;
+  isMobile?: boolean;
 }
 
-export function ChatMessages({ messages, openResourceModal }: ChatMessagesProps) {
+export function ChatMessages({ messages, openResourceModal, isMobile = false }: ChatMessagesProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const theme = useTheme();
+  const isTablet = useMediaQuery(theme.breakpoints.down('md'));
   
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -26,7 +30,7 @@ export function ChatMessages({ messages, openResourceModal }: ChatMessagesProps)
         flex: 1,
         height: '100%',
         overflowY: 'auto', 
-        p: 3,
+        p: isMobile ? 1 : isTablet ? 2 : 3,
         display: 'flex', 
         flexDirection: 'column',
         alignItems: 'center'
@@ -35,54 +39,113 @@ export function ChatMessages({ messages, openResourceModal }: ChatMessagesProps)
       <Box
         sx={{
           width: '100%',
-          maxWidth: '50%',
+          maxWidth: isMobile ? '100%' : isTablet ? '85%' : '50%',
           display: 'flex',
           flexDirection: 'column',
-          gap: 2,
-          pb: 20
+          gap: isMobile ? 1.5 : 2,
+          pb: isMobile ? 10 : isTablet ? 15 : 20
         }}
       >
         {messages.map((message, index) => (
           <Box
             key={index}
             sx={{
+                width: '100%',
                 display: 'flex',
-                justifyContent: message.role === 'user' ? 'flex-end' : 'flex-start',
-                width: '100%'
+                flexDirection: 'column',
+                ...(message.role === 'user' && {
+                  alignItems: 'flex-end',
+                }),
             }}
           >
-            <Paper
-              elevation={message.role === 'user' ? 0 : 1}
-              sx={{
+            {message.role === 'user' ? (
+              // User message with bubble
+              <Paper
+                elevation={0}
+                sx={{
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'end',
-                maxWidth: '75%',
-                px: 2,
-                py: 1.5,
-                borderRadius: 2,
-                backgroundColor: message.role === 'user' 
-                  ? 'primary.main' 
-                  : 'background.paper',
-                color: message.role === 'user' 
-                  ? 'white' 
-                  : 'text.primary',
-                overflowWrap: 'break-word',
-                wordBreak: 'break-word',
-                '& a': {
-                  color: message.role === 'user' ? 'white' : 'primary.main',
-                  textDecoration: 'underline',
-                  '&:hover': {
-                    textDecoration: 'none'
+                  maxWidth: isMobile ? '85%' : '75%',
+                  px: isMobile ? 1.5 : 2,
+                  py: isMobile ? 1 : 1.5,
+                  borderRadius: isMobile ? 1.5 : 2,
+                  backgroundColor: 'primary.main',
+                  color: 'white',
+                  overflowWrap: 'break-word',
+                  wordBreak: 'break-word',
+                  fontSize: isMobile ? '0.9rem' : 'inherit',
+                  boxShadow: 'none',
+                  '& a': {
+                    color: 'white',
+                    textDecoration: 'underline',
+                    '&:hover': {
+                      textDecoration: 'none'
+                    }
                   }
-                }
-              }}
-            >
-              <FormatMessage message={message} openResourceModal={openResourceModal} />
-                {message.role === 'assistant' && message.content && message.references ? <SaveMessageAsResourceButton message={message}/> : null}
-            </Paper>
+                }}
+              >
+                <FormatMessage message={message} openResourceModal={openResourceModal} />
+              </Paper>
+            ) : (
+              // Assistant message without bubble, full width
+              <Box 
+                sx={{
+                  width: '100%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  pt: 1,
+                  pb: 2,
+                  mb: 0.5,
+                  borderBottom: index < messages.length - 1 && messages[index + 1]?.role === 'user' ? 
+                    `1px solid ${theme.palette.divider}` : 'none',
+                  position: 'relative'
+                }}
+              >
+                <FormatMessage message={message} openResourceModal={openResourceModal} />
+                
+                <Box sx={{ 
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  mt: 2,
+                  width: '100%'
+                }}>
+                  {/* End of message indicator */}
+                  {message.complete && (
+                    <Chip
+                      icon={<DoneAllIcon fontSize="small" />}
+                      label="Response complete"
+                      size="small"
+                      sx={{
+                        height: 24,
+                        bgcolor: alpha(theme.palette.primary.main, 0.08),
+                        color: 'text.secondary',
+                        fontWeight: 500,
+                        fontSize: '0.7rem',
+                        borderRadius: '12px',
+                        '& .MuiChip-icon': {
+                          color: theme.palette.success.main,
+                          fontSize: '0.9rem',
+                        },
+                        boxShadow: `0 0 0 1px ${alpha(theme.palette.divider, 0.5)}`,
+                      }}
+                    />
+                  )}
+                  
+                  {message.role === 'assistant' && message.content && message.references && message.complete && (
+                    <Box sx={{ 
+                      alignSelf: 'flex-end',
+                    }}>
+                      <SaveMessageAsResourceButton message={message}/>
+                    </Box>
+                  )}
+                </Box>
+              </Box>
+            )}
           </Box>
         ))}
+        <div ref={messagesEndRef} />
       </Box>
     </Box>
   );

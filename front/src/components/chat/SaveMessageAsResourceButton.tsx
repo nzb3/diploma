@@ -1,7 +1,8 @@
-import {Button, CircularProgress, Typography, useMediaQuery, useTheme} from "@mui/material";
+import {CircularProgress, IconButton, useMediaQuery, useTheme} from "@mui/material";
 import {Message} from "../../types/api";
 import {useResourceManagement} from "@/hooks/useResourceManagement.ts";
 import {extractWords, safeBase64Encode} from "@services/utils.ts";
+import SaveIcon from '@mui/icons-material/Save';
 
 interface saveMessageAsResourceButtonProps {
     message: Message,
@@ -26,37 +27,28 @@ export const SaveMessageAsResourceButton = ({message}: saveMessageAsResourceButt
     }
 
     return (
-        <Button
+        <IconButton
             onClick={handleButtonClick}
-            size="small"
-            variant="contained"
+            size={isMobile ? "small" : "medium"}
+            color="primary"
             sx={{
-                minWidth: 20,
-                borderRadius: 1.5,
-                boxShadow: 2,
-                flexShrink: 0,
+                backgroundColor: 'rgba(25, 118, 210, 0.1)',
+                borderRadius: '50%',
+                p: isMobile ? 0.5 : 0.8,
+                boxShadow: 1,
                 '&:hover': {
-                    boxShadow: 3,
+                    backgroundColor: 'rgba(25, 118, 210, 0.2)',
+                    boxShadow: 2,
                 }
             }}
             disabled={isUploading}
+            aria-label="Save as resource"
         >
             {isUploading ? (
-                <>
-                    <CircularProgress size={isMobile ? 16 : 20} sx={{ color: 'white' }} />
-                    <Typography variant="button" sx={{
-                        color: 'white',
-                    }}>
-                        Saving...
-                    </Typography>
-                </>
+                <CircularProgress size={isMobile ? 16 : 20} sx={{ color: 'primary.main' }} />
             ) : (
-                <Typography variant='button' sx={{
-                    color: 'white',
-                }}>
-                    Save answer
-                </Typography>
+                <SaveIcon fontSize={isMobile ? "small" : "medium"} />
             )}
-        </Button>
+        </IconButton>
     );
 }
