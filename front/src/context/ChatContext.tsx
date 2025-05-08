@@ -162,6 +162,7 @@ export function ChatProvider({ children }: ChatProviderProps) {
               if (lastMessage?.role === 'assistant') {
                 lastMessage.content = answer;
                 lastMessage.references = currentReferencesRef.current;
+                lastMessage.complete = true;
                 return newMessages;
               } else {
                 return [...prev, { role: 'assistant', content: answer, references: currentReferencesRef.current }];

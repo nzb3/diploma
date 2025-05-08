@@ -33,6 +33,7 @@ export interface Message {
   role: 'user' | 'assistant';
   content: string;
   references?: Reference[];
+  complete?: boolean;
 }
 
 export interface Reference {
