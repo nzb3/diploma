@@ -7,7 +7,6 @@ import UnauthorizedPage from '@pages/Unauthorized';
 import SearchPage from '@pages/Search';
 import ResourcesPage from '@pages/Resources';
 import React from 'react';
-import '@/App.css'
 
 function AuthRoute({ element }: { element: React.ReactElement }) {
   const { isAuthenticated, isInitialized } = useAuth();
