@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Box, TextField, Button, Paper, Select, MenuItem, FormControl, InputLabel } from '@mui/material';
+import { useState, useRef, useEffect } from 'react';
+import { Box, TextField, Button, Paper, Select, MenuItem, FormControl, InputLabel, useMediaQuery, useTheme, Typography } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
 import StopIcon from '@mui/icons-material/Stop';
 
@@ -7,146 +7,245 @@ interface ChatInputProps {
   onSubmit: (question: string, numReferences: number) => Promise<void>;
   onCancel: () => Promise<void>;
   isLoading: boolean;
+  isMobile?: boolean;
 }
 
-export function ChatInput({ onSubmit, onCancel, isLoading }: ChatInputProps) {
+export function ChatInput({ onSubmit, onCancel, isLoading, isMobile = false }: ChatInputProps) {
   const [input, setInput] = useState('');
   const [numReferences, setNumReferences] = useState<number>(5);
+  const [isFocused, setIsFocused] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const theme = useTheme();
+  const isTablet = useMediaQuery(theme.breakpoints.down('md'));
+  
+  const isVeryNarrow = useMediaQuery('(max-width:380px)');
+  
+  const MAX_CHARS = 1000;
+  const charsRemaining = MAX_CHARS - input.length;
+  const isNearLimit = charsRemaining < 100;
+  
+  const getRows = () => {
+    if (input.length === 0) return 1;
+    const lineCount = input.split('\n').length;
+    const estimatedRows = Math.ceil(input.length / 50);
+    return Math.min(Math.max(lineCount, estimatedRows, 1), 6);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || isLoading) return;
+    if (!input.trim() || isLoading || input.length > MAX_CHARS) return;
     
     const question = input.trim();
     setInput('');
     await onSubmit(question, numReferences);
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      e.preventDefault();
+      if (input.trim() && !isLoading && input.length <= MAX_CHARS) {
+        handleSubmit(e as unknown as React.FormEvent);
+      }
+    }
+  };
+  
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      inputRef.current?.focus();
+    }, 100);
+    
+    return () => clearTimeout(timer);
+  }, []);
+
   return (
     <Paper 
       elevation={4} 
       sx={{ 
-        p: 1.5, 
+        p: isMobile ? (isVeryNarrow ? 0.75 : 1) : 1.5, 
         borderTop: 1, 
         borderColor: 'divider',
         position: 'sticky',
-        maxWidth: '50%',
-        bottom: 16,
+        maxWidth: isMobile ? '100%' : isTablet ? '85%' : '50%',
+        bottom: isMobile ? 8 : 16,
         mx: 'auto',
-        mb: 2,
-        bgcolor: 'rgba(255, 255, 255, 0.8)',
+        mb: isMobile ? 0.5 : 2,
+        bgcolor: 'rgba(255, 255, 255, 0.9)',
         backdropFilter: 'blur(8px)',
-        borderRadius: 2,
+        borderRadius: isMobile ? 1.5 : 2,
         boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)',
         zIndex: 10,
-        transform: 'translateY(-8px)',
-        transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
+        transform: isMobile ? 'none' : (isFocused ? 'translateY(-12px)' : 'translateY(-8px)'),
+        transition: 'all 0.2s ease-in-out',
         '&:hover': {
-          transform: 'translateY(-10px)',
+          transform: isMobile ? 'none' : (isFocused ? 'translateY(-12px)' : 'translateY(-10px)'),
           boxShadow: '0 6px 24px rgba(0, 0, 0, 0.15)',
         }
       }}
     >
-      <Box component="form" onSubmit={handleSubmit} sx={{ display: 'flex', gap: 1.5, margin: 0}}>
-        <TextField
-          fullWidth
-          size="small"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Ask a question..."
-          disabled={isLoading}
-          sx={{
-            '& .MuiOutlinedInput-root': {
-              '& fieldset': {
-                borderColor: 'divider',
-                borderWidth: '1px',
-              },
-              '&:hover fieldset': {
-                borderColor: 'primary.main',
-              },
-              '&.Mui-focused fieldset': {
-                borderColor: 'primary.main',
-                borderWidth: '2px',
-              },
-              fontSize: '0.9rem',
-              borderRadius: 1.5,
-            },
-            '& .MuiOutlinedInput-notchedOutline': {
-              borderRadius: 1.5,
-            },
-            '& .Mui-focused .MuiOutlinedInput-notchedOutline': {
-              borderRadius: 1.5,
-            },
-            '& .MuiInputBase-input:focus': {
-              boxShadow: 'none',
-            },
-            '& .MuiOutlinedInput-input': {
-              '&:focus': {
-                outline: 'none',
-              }
-            }
-          }}
-        />
-        <FormControl sx={{ minWidth: 100 }} size="small">
-          <InputLabel id="references-label">References</InputLabel>
-          <Select
-            labelId="references-label"
-            value={numReferences}
-            label="References"
-            onChange={(e) => setNumReferences(Number(e.target.value))}
+      <Box 
+        component="form" 
+        onSubmit={handleSubmit} 
+        sx={{ 
+          display: 'flex', 
+          flexDirection: 'column',
+          gap: 0.75, 
+          margin: 0
+        }}
+      >
+        <Box sx={{ 
+          display: 'flex',
+          flexDirection: isMobile ? 'column' : 'row',
+          gap: isMobile ? 0.75 : 1.5,
+          width: '100%'
+        }}>
+          <TextField
+            fullWidth
+            multiline
+            inputRef={inputRef}
+            maxRows={6}
+            minRows={getRows()}
+            size="small"
+            value={input}
+            onChange={(e) => setInput(e.target.value.slice(0, MAX_CHARS))}
+            onKeyDown={handleKeyDown}
+            onFocus={() => setIsFocused(true)}
+            onBlur={() => setIsFocused(false)}
+            placeholder="Ask a question..."
             disabled={isLoading}
-            sx={{ borderRadius: 1.5 }}
-          >
-            <MenuItem value={3}>3</MenuItem>
-            <MenuItem value={5}>5</MenuItem>
-            <MenuItem value={10}>10</MenuItem>
-            <MenuItem value={15}>15</MenuItem>
-            <MenuItem value={20}>20</MenuItem>
-          </Select>
-        </FormControl>
-        {isLoading ? (
-          <Button
-            variant="contained"
-            color="error"
-            size="small"
-            onClick={onCancel}
-            startIcon={<StopIcon fontSize="small" />}
-            sx={{ 
-              minWidth: 90,
-              px: 2,
-              py: 0.75,
-              borderRadius: 1.5,
-              boxShadow: 2,
-              '&:hover': {
-                bgcolor: 'error.dark',
-                boxShadow: 3,
+            error={charsRemaining < 0}
+            sx={{
+              transition: 'all 0.2s ease-in-out',
+              '& .MuiOutlinedInput-root': {
+                transition: 'all 0.2s ease-in-out',
+                '& fieldset': {
+                  borderColor: 'divider',
+                  borderWidth: '1px',
+                  transition: 'all 0.2s ease-in-out',
+                },
+                '&:hover fieldset': {
+                  borderColor: 'primary.main',
+                },
+                '&.Mui-focused fieldset': {
+                  borderColor: 'primary.main',
+                  borderWidth: '2px',
+                },
+                fontSize: isMobile ? '0.85rem' : '0.9rem',
+                borderRadius: 1.5,
+              },
+              '& .MuiOutlinedInput-notchedOutline': {
+                borderRadius: 1.5,
+              },
+              '& .Mui-focused .MuiOutlinedInput-notchedOutline': {
+                borderRadius: 1.5,
+              },
+              '& .MuiInputBase-input': {
+                padding: isMobile ? '8px 12px' : '10px 14px',
+                overflow: 'auto',
+                maxHeight: '150px',
+                transition: 'all 0.2s ease-in-out',
+                lineHeight: '1.5',
+                '&:focus': {
+                  boxShadow: 'none',
+                  outline: 'none',
+                }
               }
             }}
-          >
-            Cancel
-          </Button>
-        ) : (
-          <Button
-            variant="contained"
-            color="primary"
-            size="small"
-            type="submit"
-            disabled={!input.trim() || isLoading}
-            startIcon={<SendIcon fontSize="small" />}
+          />
+          <Box sx={{ 
+            display: 'flex',
+            flexDirection: 'row',
+            gap: 1,
+            width: isMobile ? '100%' : 'auto',
+            alignSelf: isMobile ? 'stretch' : input.length > 50 ? 'flex-start' : 'center',
+            transition: 'all 0.2s ease-in-out',
+          }}>
+            <FormControl sx={{ 
+              minWidth: isVeryNarrow ? 70 : (isMobile ? 80 : 100),
+              flex: isMobile ? 1 : 'none'
+            }} size="small">
+              <InputLabel id="references-label">Refs</InputLabel>
+              <Select
+                labelId="references-label"
+                value={numReferences}
+                label="Refs"
+                onChange={(e) => setNumReferences(Number(e.target.value))}
+                disabled={isLoading}
+                sx={{ 
+                  borderRadius: 1.5,
+                  '& .MuiSelect-select': {
+                    padding: isMobile ? '6px 12px' : '8px 14px',
+                  },
+                }}
+              >
+                <MenuItem value={3}>3</MenuItem>
+                <MenuItem value={5}>5</MenuItem>
+                <MenuItem value={10}>10</MenuItem>
+                <MenuItem value={15}>15</MenuItem>
+                <MenuItem value={20}>20</MenuItem>
+              </Select>
+            </FormControl>
+            {isLoading ? (
+              <Button
+                variant="contained"
+                color="error"
+                size="small"
+                onClick={onCancel}
+                startIcon={isVeryNarrow ? null : <StopIcon fontSize="small" />}
+                sx={{ 
+                  minWidth: isVeryNarrow ? 0 : (isMobile ? 0 : 90),
+                  flex: isMobile ? 1 : 'none',
+                  px: isVeryNarrow ? 1 : (isMobile ? 1.5 : 2),
+                  py: isMobile ? 0.5 : 0.75,
+                  borderRadius: 1.5,
+                  boxShadow: 2,
+                  '&:hover': {
+                    bgcolor: 'error.dark',
+                    boxShadow: 3,
+                  }
+                }}
+              >
+                {isVeryNarrow ? 'Stop' : 'Cancel'}
+              </Button>
+            ) : (
+              <Button
+                variant="contained"
+                color="primary"
+                size="small"
+                type="submit"
+                disabled={!input.trim() || isLoading || input.length > MAX_CHARS}
+                endIcon={isVeryNarrow ? null : <SendIcon fontSize="small" />}
+                sx={{ 
+                  minWidth: isVeryNarrow ? 0 : (isMobile ? 0 : 90),
+                  flex: isMobile ? 1 : 'none',
+                  px: isVeryNarrow ? 1 : (isMobile ? 1.5 : 2),
+                  py: isMobile ? 0.5 : 0.75,
+                  borderRadius: 1.5,
+                  boxShadow: 2,
+                  transition: 'all 0.2s ease-in-out',
+                  '&:hover': {
+                    bgcolor: 'primary.dark',
+                    boxShadow: 3,
+                  }
+                }}
+              >
+                {isVeryNarrow ? 'Ask' : 'Ask'}
+              </Button>
+            )}
+          </Box>
+        </Box>
+        
+        {input.length > 0 && (
+          <Typography 
+            variant="caption" 
+            align="right"
             sx={{ 
-              minWidth: 90,
-              px: 2,
-              py: 0.75,
-              borderRadius: 1.5,
-              boxShadow: 2,
-              '&:hover': {
-                bgcolor: 'primary.dark',
-                boxShadow: 3,
-              }
+              color: isNearLimit ? (charsRemaining < 0 ? 'error.main' : 'warning.main') : 'text.secondary',
+              mt: -0.5,
+              opacity: 0.8
             }}
           >
-            Send
-          </Button>
+            {charsRemaining} characters remaining
+          </Typography>
         )}
       </Box>
     </Paper>
