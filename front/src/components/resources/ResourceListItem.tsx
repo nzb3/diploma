@@ -16,13 +16,14 @@ import MarkdownIcon from '@mui/icons-material/Code';
 import LinkIcon from '@mui/icons-material/Link';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { getStatusDescription } from '@services/utils';
+import { ReactNode } from "react";
 
 interface ResourceListItemProps {
     resource: Resource;
     onResourceClick: (resource: Resource) => void;
     onDeleteResource: (resourceId: string) => void;
     uploadError?: string;
-    renderStatusChip?: (status: string) => React.ReactNode;
+    renderStatusChip?: (status: string) => ReactNode;
 }
 
 export function ResourceListItem({

@@ -4,8 +4,8 @@ import {
     saveResource,
     deleteResource as apiDeleteResource,
     updateResource as apiUpdateResource,
-} from '../services/api';
-import {Resource, ResourceEvent, SaveDocumentRequest, UpdateResourceRequest} from '../types/api';
+} from '@/services/api';
+import {Resource, ResourceEvent, SaveDocumentRequest, UpdateResourceRequest} from '@/types/api';
 
 interface UseResourceManagementResult {
     resources: Resource[];

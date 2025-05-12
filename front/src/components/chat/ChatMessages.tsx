@@ -39,6 +39,22 @@ export function ChatMessages({ messages, openResourceModal, isMobile = false }: 
         alignItems: 'center'
       }}
     >
+      {messages.length > 0 && (
+        <Box 
+          sx={{ 
+            width: '100%',
+            display: isMobile ? 'none' : 'flex', 
+            justifyContent: 'flex-start',
+            mb: 2,
+            position: 'sticky',
+            top: 8,
+            zIndex: 10,
+            pl: isMobile ? 1 : 2
+          }}
+        >
+          <ClearChatButton />
+        </Box>
+      )}
       <Box
         sx={{
           width: '100%',
@@ -139,7 +155,11 @@ export function ChatMessages({ messages, openResourceModal, isMobile = false }: 
                   {message.role === 'assistant' && message.content && message.references && message.complete && (
                     <Box sx={{ 
                       alignSelf: 'flex-end',
+                      display: 'flex',
+                      gap: 1,
                     }}>
+                      <DeleteMessageButton messageIndex={index} />
+                      <RetryAskButton messageIndex={index} />
                       <SaveMessageAsResourceButton message={message}/>
                     </Box>
                   )}

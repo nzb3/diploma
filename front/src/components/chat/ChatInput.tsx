@@ -8,7 +8,7 @@ import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
 import { useChat } from '@/context/ChatContext';
 
 interface ChatInputProps {
-  onSubmit: (question: string, numReferences: number) => Promise<void>;
+  onSubmit: (question: string, numReferences: number, usePreviousMessages: boolean) => Promise<void>;
   onCancel: () => Promise<void>;
   isLoading: boolean;
   isMobile?: boolean;
@@ -17,12 +17,43 @@ interface ChatInputProps {
 export function ChatInput({ onSubmit, onCancel, isLoading, isMobile = false }: ChatInputProps) {
   const [input, setInput] = useState('');
   const [numReferences, setNumReferences] = useState<number>(5);
+  const [usePreviousMessages, setUsePreviousMessages] = useState<boolean>(false);
   const [isFocused, setIsFocused] = useState(false);
+  const { clearChat, messages } = useChat();
   const inputRef = useRef<HTMLInputElement>(null);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
   const theme = useTheme();
   const isTablet = useMediaQuery(theme.breakpoints.down('md'));
-  
   const isVeryNarrow = useMediaQuery('(max-width:380px)');
+  
+  const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null);
+  const openMenu = Boolean(menuAnchorEl);
+  
+  const handleMenuClick = () => {
+    setMenuAnchorEl(menuButtonRef.current);
+  };
+  
+  const handleMenuClose = () => {
+    setMenuAnchorEl(null);
+  };
+  
+  const handleClearChat = () => {
+    clearChat();
+    handleMenuClose();
+  };
+  
+  useEffect(() => {
+    const handleResize = () => {
+      if (openMenu) {
+        handleMenuClose();
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [openMenu]);
   
   const MAX_CHARS = 1000;
   const charsRemaining = MAX_CHARS - input.length;
@@ -41,7 +72,7 @@ export function ChatInput({ onSubmit, onCancel, isLoading, isMobile = false }: C
     
     const question = input.trim();
     setInput('');
-    await onSubmit(question, numReferences);
+    await onSubmit(question, numReferences, usePreviousMessages);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -102,6 +133,82 @@ export function ChatInput({ onSubmit, onCancel, isLoading, isMobile = false }: C
           gap: isMobile ? 0.75 : 1.5,
           width: '100%'
         }}>
+          {isMobile && messages.length > 0 && (
+            <Box 
+              sx={{ 
+                alignSelf: 'flex-end', 
+                mb: 1,
+                display: 'flex',
+                justifyContent: 'flex-end',
+                position: 'relative'
+              }}
+            >
+              <IconButton
+                size="small"
+                onClick={handleMenuClick}
+                ref={menuButtonRef}
+                aria-label="more options"
+                aria-controls={openMenu ? 'chat-menu' : undefined}
+                aria-haspopup="true"
+                aria-expanded={openMenu ? 'true' : undefined}
+                sx={{ 
+                  color: theme.palette.text.secondary,
+                  boxShadow: theme.shadows[1],
+                  backgroundColor: theme.palette.background.paper,
+                  '&:hover': {
+                    backgroundColor: theme.palette.action.hover
+                  }
+                }}
+              >
+                <MoreVertIcon fontSize="small" />
+              </IconButton>
+              <Menu
+                id="chat-menu"
+                anchorEl={menuAnchorEl}
+                open={openMenu}
+                onClose={handleMenuClose}
+                anchorOrigin={{
+                  vertical: 'bottom',
+                  horizontal: 'right',
+                }}
+                transformOrigin={{
+                  vertical: 'top',
+                  horizontal: 'right',
+                }}
+                slotProps={{
+                  paper: {
+                    sx: {
+                      width: 180,
+                      mt: 0.5,
+                      boxShadow: theme.shadows[3],
+                    }
+                  }
+                }}
+                MenuListProps={{
+                  sx: { padding: 0.5 }
+                }}
+                disableScrollLock
+                disableAutoFocus
+                disableEnforceFocus
+                disablePortal={false}
+                keepMounted={false}
+              >
+                <MenuItem onClick={handleClearChat} dense>
+                  <ListItemIcon>
+                    <DeleteSweepIcon fontSize="small" color="error" />
+                  </ListItemIcon>
+                  <ListItemText 
+                    primary="Clear chat" 
+                    primaryTypographyProps={{ 
+                      color: theme.palette.error.main,
+                      fontSize: '0.875rem'
+                    }} 
+                  />
+                </MenuItem>
+              </Menu>
+            </Box>
+          )}
+          
           <TextField
             fullWidth
             multiline
@@ -238,19 +345,51 @@ export function ChatInput({ onSubmit, onCancel, isLoading, isMobile = false }: C
           </Box>
         </Box>
         
-        {input.length > 0 && (
-          <Typography 
-            variant="caption" 
-            align="right"
+        <Box sx={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center', 
+          mt: -0.5
+        }}>
+          <FormControlLabel
+            control={
+              <Switch
+                size={isMobile ? "small" : "medium"}
+                checked={usePreviousMessages}
+                onChange={(e) => setUsePreviousMessages(e.target.checked)}
+                disabled={isLoading}
+                color="primary"
+              />
+            }
+            label={
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <HistoryIcon fontSize="small" color={usePreviousMessages ? "primary" : "disabled"} />
+                <Typography variant="caption" color={usePreviousMessages ? "primary" : "text.secondary"}>
+                  {isMobile ? "Use history" : "Use conversation history"}
+                </Typography>
+              </Box>
+            }
             sx={{ 
-              color: isNearLimit ? (charsRemaining < 0 ? 'error.main' : 'warning.main') : 'text.secondary',
-              mt: -0.5,
-              opacity: 0.8
+              mr: 0,
+              '& .MuiFormControlLabel-label': { 
+                fontSize: isMobile ? '0.75rem' : '0.8rem' 
+              }
             }}
-          >
-            {charsRemaining} characters remaining
-          </Typography>
-        )}
+          />
+          
+          {input.length > 0 && (
+            <Typography 
+              variant="caption" 
+              align="right"
+              sx={{ 
+                color: isNearLimit ? (charsRemaining < 0 ? 'error.main' : 'warning.main') : 'text.secondary',
+                opacity: 0.8
+              }}
+            >
+              {charsRemaining} characters remaining
+            </Typography>
+          )}
+        </Box>
       </Box>
     </Paper>
   );
