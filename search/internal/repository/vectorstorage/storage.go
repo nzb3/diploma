@@ -294,7 +294,12 @@ func (s *VectorStorage) ask(ctx context.Context, question string, opts ...interf
 		}
 
 		retriever := s.setupRetriever(filters, numOfResults, cb)
-		retrievalQAChain := s.setupRetrievalQA(retriever)
+		chain, err := s.setupChains(retriever)
+		if err != nil {
+			slog.ErrorContext(ctx, "Failed to setup retriever", "op", op, "error", err)
+			errCh <- fmt.Errorf("%s: %w", op, err)
+		}
+
 		chainOpts = append(chainOpts, chains.WithMaxTokens(s.cfg.MaxTokens), chains.WithCallback(cb))
 
 		select {
@@ -304,7 +309,7 @@ func (s *VectorStorage) ask(ctx context.Context, question string, opts ...interf
 			slog.DebugContext(ctx, "Running retrieval QA chain")
 			answer, err := chains.Run(
 				ctx,
-				retrievalQAChain,
+				chain,
 				question,
 				chainOpts...,
 			)
@@ -319,7 +324,7 @@ func (s *VectorStorage) ask(ctx context.Context, question string, opts ...interf
 	return answerCh, refsCh, errCh, doneCh
 }
 
-func newRetrieverEndHandler(refsChans ...chan<- []models.Reference) func(ctx context.Context, query string, documents []schema.Document) {
+func newRetrieverEndHandler(refsChains ...chan<- []models.Reference) func(ctx context.Context, query string, documents []schema.Document) {
 	return func(ctx context.Context, query string, documents []schema.Document) {
 		slog.Info("On retrieving was received documents", "documents_count", len(documents))
 		select {
@@ -327,7 +332,7 @@ func newRetrieverEndHandler(refsChans ...chan<- []models.Reference) func(ctx con
 			return
 		default:
 			refs := parseReferences(documents)
-			for _, ch := range refsChans {
+			for _, ch := range refsChains {
 				ch <- refs
 			}
 		}
@@ -345,7 +350,7 @@ func getUserID(ctx context.Context) (string, error) {
 func (s *VectorStorage) setupRetriever(filters map[string]interface{}, numResults int, callbackHandler ...*callback.Handler) *vectorstores.Retriever {
 	slog.DebugContext(context.Background(), "Configuring retriever",
 		"num_results", numResults)
-	retriever := vectorstores.ToRetriever(s.vectorStore, numResults, vectorstores.WithFilters(filters))
+	retriever := vectorstores.ToRetriever(s.vectorStore, numResults, vectorstores.WithFilters(filters), vectorstores.WithScoreThreshold(0.5))
 	if len(callbackHandler) > 0 {
 		retriever.CallbacksHandler = callbackHandler[0]
 	}
@@ -353,39 +358,6 @@ func (s *VectorStorage) setupRetriever(filters map[string]interface{}, numResult
 }
 
 func (s *VectorStorage) setupRetrievalQA(retriever *vectorstores.Retriever) chains.RetrievalQA {
-	slog.DebugContext(context.Background(), "Initializing QA chain")
-	prompt := s.setupPrompt()
-
-	llmChain := chains.NewLLMChain(
-		s.generator,
-		prompt,
-	)
-
-	retrievalChain := chains.NewRetrievalQA(
-		chains.NewStuffDocuments(llmChain),
-		retriever,
-	)
-
-	return retrievalChain
-}
-
-func parseReferences(docs []schema.Document) []models.Reference {
-	slog.DebugContext(context.Background(), "Parsing references",
-		"documents_count", len(docs))
-	return lo.Map(docs, func(doc schema.Document, _ int) models.Reference {
-		return models.Reference{
-			Content: doc.PageContent,
-			Score:   doc.Score,
-		}
-	})
-}
-
-func clearText(text string) string {
-	re := regexp.MustCompile(`!\[[^\]]*\]\([^)]+\)`)
-	return re.ReplaceAllString(text, "")
-}
-
-func (s *VectorStorage) setupPrompt() prompts.PromptTemplate {
 	customPromptText := `Use the following pieces of context to answer the question at the end. If you don't know the answer, just say that you don't know, don't try to make up an answer
 
 {{.context}}
@@ -404,5 +376,35 @@ Helpful Answer:
 		DefaultPrompt: prompt,
 	}
 
-	return qaPromptSelector.GetPrompt(s.generator)
+	prompt = qaPromptSelector.GetPrompt(s.generator)
+
+	llmChain := chains.NewLLMChain(s.generator, prompt)
+	return chains.NewRetrievalQA(
+		chains.NewStuffDocuments(llmChain),
+		retriever,
+	)
+}
+
+func (s *VectorStorage) setupChains(retriever *vectorstores.Retriever) (chains.Chain, error) {
+	qaChain := s.setupRetrievalQA(retriever)
+
+	return chains.NewSimpleSequentialChain(
+		[]chains.Chain{qaChain},
+	)
+}
+
+func parseReferences(docs []schema.Document) []models.Reference {
+	slog.DebugContext(context.Background(), "Parsing references",
+		"documents_count", len(docs))
+	return lo.Map(docs, func(doc schema.Document, _ int) models.Reference {
+		return models.Reference{
+			Content: doc.PageContent,
+			Score:   doc.Score,
+		}
+	})
+}
+
+func clearText(text string) string {
+	re := regexp.MustCompile(`!\[[^\]]*\]\([^)]+\)`)
+	return re.ReplaceAllString(text, "")
 }
