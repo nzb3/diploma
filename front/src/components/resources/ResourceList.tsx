@@ -1,6 +1,5 @@
 import { Resource } from '@/types/api';
-import { ResourceListItem } from './ResourceListItem';
-import { ResourceLegend } from './ResourceLegend';
+import { ResourceListItem, ResourceLegend  } from '@/components';
 import {
   Box,
   Card,

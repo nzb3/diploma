@@ -1,4 +1,4 @@
-import { Resource } from '../../types/api';
+import { Resource } from '@/types/api';
 import {
     ListItem,
     ListItemText,

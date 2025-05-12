@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from 'react';
-import { SaveDocumentRequest } from '../../types/api';
+import { SaveDocumentRequest } from '@/types/api.ts';
 import {
   Paper,
   Typography,
@@ -20,6 +20,7 @@ import DescriptionIcon from '@mui/icons-material/Description';
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
 import TextSnippetIcon from '@mui/icons-material/TextSnippet';
 import {safeBase64Encode} from "@services/utils.ts";
+import {FormEvent, DragEvent, ChangeEvent} from "react";
 
 interface ResourceUploadFormProps {
   onUpload: (data: SaveDocumentRequest) => Promise<void>;

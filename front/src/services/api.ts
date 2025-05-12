@@ -1,5 +1,5 @@
 import axios from 'axios';
-import {AskRequest, AskResponse, Resource, SaveDocumentRequest, UpdateResourceRequest} from '../types/api';
+import {AskRequest, AskResponse, Resource, SaveDocumentRequest, UpdateResourceRequest} from '@/types/api';
 import authService from './authService';
 
 const API_BASE_URL = '/api/v1';

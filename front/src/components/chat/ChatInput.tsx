@@ -1,7 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
-import { Box, TextField, Button, Paper, Select, MenuItem, FormControl, InputLabel, useMediaQuery, useTheme, Typography } from '@mui/material';
+import { Box, TextField, Button, Paper, Select, MenuItem, FormControl, InputLabel, useMediaQuery, useTheme, Typography, Switch, FormControlLabel, IconButton, Menu, ListItemIcon, ListItemText } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
 import StopIcon from '@mui/icons-material/Stop';
+import HistoryIcon from '@mui/icons-material/History';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
+import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
+import { useChat } from '@/context/ChatContext';
 
 interface ChatInputProps {
   onSubmit: (question: string, numReferences: number) => Promise<void>;

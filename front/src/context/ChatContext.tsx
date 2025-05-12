@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useRef, ReactNode, useEffect, useCallback } from 'react';
-import { streamAnswer, cancelStream } from '../services/api';
-import { Message, CompleteResult, Reference } from '../types/api';
+import { streamAnswer, cancelStream } from '@/services/api';
+import { Message, CompleteResult, Reference } from '@/types';
 
 const decodeHtmlEntities = (html: string): string => {
   const textArea = document.createElement('textarea');

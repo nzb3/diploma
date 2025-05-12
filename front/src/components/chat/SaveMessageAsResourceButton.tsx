@@ -1,5 +1,5 @@
 import {CircularProgress, IconButton, useMediaQuery, useTheme} from "@mui/material";
-import {Message} from "../../types/api";
+import {Message} from "@/types/api";
 import {useResourceManagement} from "@/hooks/useResourceManagement.ts";
 import {extractWords, safeBase64Encode} from "@services/utils.ts";
 import SaveIcon from '@mui/icons-material/Save';

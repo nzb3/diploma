@@ -40,11 +40,9 @@ function App() {
       <ChatProvider>
         <Router>
           <Routes>
-            {/* Root path - show LandingPage or SearchPage based on auth status */}
             <Route path="/" element={<RootRoute />} />
             
-            {/* Protected routes - show content if authenticated, otherwise show Unauthorized */}
-            <Route 
+            <Route
               path="/resources" 
               element={
                 <AuthRoute 
@@ -57,7 +55,6 @@ function App() {
               } 
             />
             
-            {/* Any undefined route shows NotFound without redirect */}
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </Router>
