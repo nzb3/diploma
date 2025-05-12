@@ -55,7 +55,7 @@ class AuthService {
 
   logout(): void {
     if (this.keycloak) {
-      this.keycloak.logout();
+      this.keycloak.logout({ redirectUri: window.location.origin });
     }
   }
 

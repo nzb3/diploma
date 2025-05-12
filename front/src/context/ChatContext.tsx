@@ -57,11 +57,11 @@ export function ChatProvider({ children }: ChatProviderProps) {
       window.clearTimeout(timeoutIdRef.current);
       timeoutIdRef.current = null;
     }
-    
+
     setIsLoading(false);
     setCurrentProcessId(null);
     setRetryingMessageIndex(null);
-    
+
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
       eventSourceRef.current = null;
@@ -70,223 +70,106 @@ export function ChatProvider({ children }: ChatProviderProps) {
 
   const resetActivityTimer = useCallback(() => {
     lastActivityTimestampRef.current = Date.now();
-    
+
     if (timeoutIdRef.current !== null) {
       window.clearTimeout(timeoutIdRef.current);
     }
-    
+
     timeoutIdRef.current = window.setTimeout(() => {
       const timeElapsed = Date.now() - lastActivityTimestampRef.current;
-      
-      if (timeElapsed >= SSE_TIMEOUT) {
+
+      if (timeElapsed >= SSE_TIMEOUT && isLoading && eventSourceRef.current) {
         console.warn('SSE connection inactive for too long, closing connection');
-        
-        if (isLoading && eventSourceRef.current) {
-          console.log('Closing inactive SSE connection');
-          cleanupConnection();
-        }
+        cleanupConnection();
       }
     }, SSE_TIMEOUT);
   }, [isLoading, cleanupConnection]);
 
-  const retryGeneration = async (messageIndex: number) => {
-    const previousAnswer = messages[messageIndex].content;
-    
-    let userMessageIndex = messageIndex - 1;
-    while (userMessageIndex >= 0 && messages[userMessageIndex].role !== 'user') {
-      userMessageIndex--;
-    }
-    
-    if (userMessageIndex >= 0 && !isLoading) {
-      const userMessage = messages[userMessageIndex];
-      
-      const targetMessageIndex = messageIndex;
-      
-      setMessages(prev => {
-        const updatedMessages = [...prev];
-        if (updatedMessages[targetMessageIndex]) {
-          updatedMessages[targetMessageIndex] = {
-            ...updatedMessages[targetMessageIndex],
-            content: 'Regenerating answer...',
-            references: []
-          };
-        }
+  const updateMessageContent = useCallback((
+      messageIndex: number | null,
+      content: string,
+      references: Reference[],
+      isComplete = false,
+      isStopped = false
+  ) => {
+    setMessages(prev => {
+      const updatedMessages = [...prev];
+
+      if (messageIndex !== null && updatedMessages[messageIndex]) {
+        updatedMessages[messageIndex] = {
+          ...updatedMessages[messageIndex],
+          content,
+          references,
+          complete: isComplete,
+          stopped: isStopped
+        };
         return updatedMessages;
-      });
-      
-      hasReceivedData.current = false;
-      currentAnswerRef.current = '';
-      currentReferencesRef.current = [];
-      setIsLoading(true);
-      setRetryingMessageIndex(messageIndex);
-      
-      resetActivityTimer();
-      
-      try {
-        console.log('Retrying question:', userMessage.content);
-        
-        if (eventSourceRef.current) {
-          console.log('Closing existing EventSource');
-          eventSourceRef.current.close();
-          eventSourceRef.current = null;
-        }
-        const promptForRetry = `You gave me a bad answer to a question. Try it again, but paraphrase your answer, try to make it better then previous one.
-** Your previous answer **
-${previousAnswer}
-** Question **
-${userMessage.content}`;
-        
-        const processStreamResponse = (content: string, references: Reference[], isComplete: boolean) => {
-          setMessages(prev => {
-            const updatedMessages = [...prev];
-            if (updatedMessages[targetMessageIndex]) {
-              updatedMessages[targetMessageIndex] = {
-                ...updatedMessages[targetMessageIndex],
-                content: content,
-                references: references,
-                complete: isComplete
-              };
-            }
-            return updatedMessages;
-          });
-        };
-        
-        const setupRetryEventListeners = (eventSource: EventSource) => {
-          eventSource.addEventListener('chunk', (event) => {
-            resetActivityTimer();
-            
-            try {
-              const data = JSON.parse(event.data);
-              
-              hasReceivedData.current = true;
-              
-              if (data.content) {
-                if (data.process_id) {
-                  setCurrentProcessId(data.process_id);
-                }
-                
-                const decodedContent = decodeHtmlEntities(data.content);
-                currentAnswerRef.current += decodedContent;
-                
-                processStreamResponse(currentAnswerRef.current, currentReferencesRef.current, false);
-              }
-            } catch (error) {
-              console.error('Error parsing chunk message:', error);
-            }
-          });
+      }
 
-          eventSource.addEventListener('complete', (event) => {
-            resetActivityTimer();
-            
-            try {
-              const data = JSON.parse(event.data);
-              
-              if (data.complete === true && data.result) {
-                const result = data.result as CompleteResult;
-                const answer = result.answer;
-                
-                processStreamResponse(answer, currentReferencesRef.current, true);
-              }
-              
-              cleanupConnection();
-            } catch (error) {
-              console.error('Error parsing complete message:', error);
-            }
-          });
+      const lastMessage = updatedMessages[updatedMessages.length - 1];
+      if (lastMessage?.role === 'assistant') {
+        lastMessage.content = content;
+        lastMessage.references = references;
+        if (isComplete) lastMessage.complete = true;
+        return updatedMessages;
+      } else {
+        return [
+          ...updatedMessages,
+          { role: 'assistant', content, references, complete: isComplete, stopped: isStopped }
+        ];
+      }
+    });
+  }, []);
 
-          eventSource.addEventListener('message', () => {
-            resetActivityTimer();
-          });
+  const handleStreamError = useCallback((targetIndex: number | null) => {
+    if (!hasReceivedData.current) {
+      const errorMessage = 'Sorry, I was unable to generate a response. Please try again.';
 
-          eventSource.addEventListener('resources', () => {
-            resetActivityTimer();
-          });
-
-          eventSource.addEventListener('resources', (event) => {
-            resetActivityTimer();
-            
-            try {
-              const data = JSON.parse(event.data);
-              
-              if (data.references && Array.isArray(data.references)) {
-                currentReferencesRef.current = data.references;
-                processStreamResponse(currentAnswerRef.current, data.references, false);
-              }
-            } catch (error) {
-              console.error('Error parsing references message:', error);
-            }
-          });
-
-          eventSource.addEventListener('error', (event) => {
-            console.error('Error event from SSE connection:', event);
-            
-            if (!hasReceivedData.current) {
-              processStreamResponse('Sorry, I was unable to regenerate a response. Please try again.', [], true);
-            }
-            
-            cleanupConnection();
-          });
-        };
-
-        const eventSource = await streamAnswer(promptForRetry, 5);
-        eventSourceRef.current = eventSource;
-        
-        setupRetryEventListeners(eventSource);
-      } catch (error) {
-        console.error('Error setting up SSE connection for retry:', error);
-        
+      if (targetIndex !== null) {
+        updateMessageContent(targetIndex, errorMessage, [], true);
+      } else {
         setMessages(prev => {
-          const updatedMessages = [...prev];
-          if (updatedMessages[targetMessageIndex]) {
-            updatedMessages[targetMessageIndex] = {
-              ...updatedMessages[targetMessageIndex],
-              content: 'Error regenerating answer. Please try again.',
-              complete: true
-            };
+          const newMessages = [...prev];
+          const lastUserMessageIndex = newMessages.findIndex(m => m.role === 'user');
+
+          if (lastUserMessageIndex !== -1) {
+            return [
+              ...newMessages.slice(0, lastUserMessageIndex + 1),
+              { role: 'assistant', content: errorMessage, complete: true, references: [] }
+            ];
           }
-          return updatedMessages;
+          return newMessages;
         });
-        
-        cleanupConnection();
       }
     }
-  };
-  
-  const setupEventListeners = (eventSource: EventSource) => {
+
+    cleanupConnection();
+  }, [cleanupConnection, updateMessageContent]);
+
+  const setupStreamEventListeners = useCallback((
+      eventSource: EventSource,
+      targetMessageIndex: number | null = null
+  ) => {
     eventSource.addEventListener('chunk', (event) => {
-      console.log('Chunk event received:', event.data);
       resetActivityTimer();
-      
+
       try {
         const data = JSON.parse(event.data);
-        console.log('Parsed chunk data:', data);
-        
         hasReceivedData.current = true;
-        
+
         if (data.content) {
-          console.log('Processing chunk content:', data.content);
-          
           if (data.process_id) {
-            console.log('Setting process ID:', data.process_id);
             setCurrentProcessId(data.process_id);
           }
-          
+
           const decodedContent = decodeHtmlEntities(data.content);
-          
           currentAnswerRef.current += decodedContent;
-          console.log('Current answer:', currentAnswerRef.current);
-          
-          setMessages(prev => {
-            const newMessages = [...prev];
-            const lastMessage = newMessages[newMessages.length - 1];
-            if (lastMessage?.role === 'assistant') {
-              lastMessage.content = currentAnswerRef.current;
-              lastMessage.references = currentReferencesRef.current;
-              return newMessages;
-            } else {
-              return [...prev, { role: 'assistant', content: currentAnswerRef.current, references: currentReferencesRef.current }];
-            }
-          });
+
+          updateMessageContent(
+              targetMessageIndex,
+              currentAnswerRef.current,
+              currentReferencesRef.current
+          );
         }
       } catch (error) {
         console.error('Error parsing chunk message:', error);
@@ -294,72 +177,43 @@ ${userMessage.content}`;
     });
 
     eventSource.addEventListener('complete', (event) => {
-      console.log('Complete event received:', event.data);
       resetActivityTimer();
-      
+
       try {
         const data = JSON.parse(event.data);
-        console.log('Parsed complete data:', data);
-        
+
         if (data.complete === true && data.result) {
-          console.log('Stream completed with result:', data.result);
-          
           const result = data.result as CompleteResult;
-          const answer = result.answer;
-          
-          setMessages(prev => {
-            const newMessages = [...prev];
-            const lastMessage = newMessages[newMessages.length - 1];
-            if (lastMessage?.role === 'assistant') {
-              lastMessage.content = answer;
-              lastMessage.references = currentReferencesRef.current;
-              lastMessage.complete = true;
-              return newMessages;
-            } else {
-              return [...prev, { role: 'assistant', content: answer, references: currentReferencesRef.current }];
-            }
-          });
+          updateMessageContent(
+              targetMessageIndex,
+              result.answer,
+              currentReferencesRef.current,
+              true
+          );
         }
-        
+
         cleanupConnection();
       } catch (error) {
         console.error('Error parsing complete message:', error);
       }
     });
 
-    eventSource.addEventListener('message', () => {
-      resetActivityTimer();
-    });
-
-    eventSource.addEventListener('resources', () => {
-      resetActivityTimer();
-    });
+    eventSource.addEventListener('message', resetActivityTimer);
+    eventSource.addEventListener('resources', resetActivityTimer);
 
     eventSource.addEventListener('resources', (event) => {
-      console.log('References event received:', event.data);
       resetActivityTimer();
-      
+
       try {
         const data = JSON.parse(event.data);
-        console.log('Parsed references data:', data);
-        
+
         if (data.references && Array.isArray(data.references)) {
           currentReferencesRef.current = data.references;
-
-          setMessages(prev => {
-            const newMessages = [...prev];
-            const lastMessage = newMessages[newMessages.length - 1];
-            if (lastMessage?.role === 'assistant') {
-              lastMessage.references = data.references;
-              return newMessages;
-            } else {
-              return [...prev, { 
-                role: 'assistant', 
-                content: currentAnswerRef.current,
-                references: data.references 
-              }];
-            }
-          });
+          updateMessageContent(
+              targetMessageIndex,
+              currentAnswerRef.current,
+              data.references
+          );
         }
       } catch (error) {
         console.error('Error parsing references message:', error);
@@ -368,25 +222,66 @@ ${userMessage.content}`;
 
     eventSource.addEventListener('error', (event) => {
       console.error('Error event from SSE connection:', event);
-      
-      if (!hasReceivedData.current) {
-        setMessages(prev => {
-          const newMessages = [...prev];
-          const lastUserMessageIndex = newMessages.findIndex(m => m.role === 'user');
-          
-          if (lastUserMessageIndex !== -1) {
-            return [
-              ...newMessages.slice(0, lastUserMessageIndex + 1),
-              { role: 'assistant', content: 'Sorry, I was unable to generate a response. Please try again.' }
-            ];
-          }
-          
-          return newMessages;
-        });
-      }
-      
-      cleanupConnection();
+      handleStreamError(targetMessageIndex);
     });
+  }, [resetActivityTimer, updateMessageContent, handleStreamError, cleanupConnection]);
+
+  const initiateStreaming = useCallback(async (
+      prompt: string,
+      numReferences: number = 5,
+      targetMessageIndex: number | null = null
+  ) => {
+    try {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+
+      const eventSource = await streamAnswer(prompt, numReferences);
+      eventSourceRef.current = eventSource;
+
+      setupStreamEventListeners(eventSource, targetMessageIndex);
+      return true;
+    } catch (error) {
+      console.error('Error setting up SSE connection:', error);
+
+      const errorMessage = 'Sorry, there was an error connecting to the service. Please try again later.';
+      updateMessageContent(targetMessageIndex, errorMessage, [], true);
+
+      cleanupConnection();
+      return false;
+    }
+  }, [setupStreamEventListeners, cleanupConnection, updateMessageContent]);
+
+  const retryGeneration = async (messageIndex: number) => {
+    const previousAnswer = messages[messageIndex].content;
+
+    let userMessageIndex = messageIndex - 1;
+    while (userMessageIndex >= 0 && messages[userMessageIndex].role !== 'user') {
+      userMessageIndex--;
+    }
+
+    if (userMessageIndex >= 0 && !isLoading) {
+      const userMessage = messages[userMessageIndex];
+
+      updateMessageContent(messageIndex, 'Regenerating answer...', []);
+
+      hasReceivedData.current = false;
+      currentAnswerRef.current = '';
+      currentReferencesRef.current = [];
+      setIsLoading(true);
+      setRetryingMessageIndex(messageIndex);
+
+      resetActivityTimer();
+
+      const promptForRetry = `You gave me a bad answer to a question. Try it again, but paraphrase your answer, try to make it better then previous one.
+** Your previous answer **
+${previousAnswer}
+** Question **
+${userMessage.content}`;
+
+      await initiateStreaming(promptForRetry, 5, messageIndex);
+    }
   };
 
   const submitQuestion = async (question: string, numReferences: number = 5, usePreviousMessages: boolean = false) => {
@@ -395,45 +290,21 @@ ${userMessage.content}`;
     hasReceivedData.current = false;
     currentAnswerRef.current = '';
     currentReferencesRef.current = [];
-    
+
     let fullPrompt = question;
-    
+
     if (usePreviousMessages && messages.length > 0) {
-      const conversationHistory = messages.map(msg => 
-        `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`
+      const conversationHistory = messages.map(msg =>
+          `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`
       ).join('\n\n');
-      
+
       fullPrompt = `I have the following conversation history:\n\n${conversationHistory}\n\nBased on this history, please answer my new question: ${question}`;
     }
-    
+
     setMessages(prev => [...prev, { role: 'user', content: question }]);
     setIsLoading(true);
-
     resetActivityTimer();
-
-    try {
-      console.log('Starting streaming with question:', fullPrompt);
-
-      if (eventSourceRef.current) {
-        console.log('Closing existing EventSource');
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
-      }
-
-      const eventSource = await streamAnswer(fullPrompt, numReferences);
-      eventSourceRef.current = eventSource;
-
-      setupEventListeners(eventSource);
-    } catch (error) {
-      console.error('Error setting up SSE connection:', error);
-      
-      setMessages(prev => [
-        ...prev, 
-        { role: 'assistant', content: 'Sorry, there was an error connecting to the service. Please try again later.' }
-      ]);
-      
-      cleanupConnection();
-    }
+    await initiateStreaming(fullPrompt, numReferences);
   };
 
   const cancelGeneration = async () => {
@@ -445,40 +316,54 @@ ${userMessage.content}`;
       }
     }
     
+    if (retryingMessageIndex !== null) {
+      updateMessageContent(
+        retryingMessageIndex, 
+        currentAnswerRef.current, 
+        currentReferencesRef.current, 
+        false, 
+        true
+      );
+    } else {
+      updateMessageContent(
+        null, 
+        currentAnswerRef.current, 
+        currentReferencesRef.current, 
+        false, 
+        true
+      );
+    }
+    
     cleanupConnection();
   };
 
   const deleteMessage = (messageIndex: number) => {
     const messageToDelete = messages[messageIndex];
-    
+
     if (messageToDelete.role === 'assistant') {
       let userMessageIndex = messageIndex - 1;
       while (userMessageIndex >= 0 && messages[userMessageIndex].role !== 'user') {
         userMessageIndex--;
       }
-      
-      if (userMessageIndex >= 0) {
-        setMessages(prev => {
-          const newMessages = [...prev];
+
+      setMessages(prev => {
+        const newMessages = [...prev];
+        if (userMessageIndex >= 0) {
           newMessages.splice(userMessageIndex, messageIndex - userMessageIndex + 1);
-          return newMessages;
-        });
-      } else {
-        setMessages(prev => {
-          const newMessages = [...prev];
+        } else {
           newMessages.splice(messageIndex, 1);
-          return newMessages;
-        });
-      }
+        }
+        return newMessages;
+      });
     } else if (messageToDelete.role === 'user') {
       let nextIndex = messageIndex + 1;
       let deleteCount = 1;
-      
+
       while (nextIndex < messages.length && messages[nextIndex].role === 'assistant') {
         deleteCount++;
         nextIndex++;
       }
-      
+
       setMessages(prev => {
         const newMessages = [...prev];
         newMessages.splice(messageIndex, deleteCount);
@@ -501,18 +386,18 @@ ${userMessage.content}`;
   }, [cleanupConnection]);
 
   return (
-    <ChatContext.Provider value={{ 
-      messages, 
-      isLoading, 
-      submitQuestion, 
-      cancelGeneration,
-      decodeHtmlEntities,
-      retryGeneration,
-      retryingMessageIndex,
-      deleteMessage,
-      clearChat,
-    }}>
-      {children}
-    </ChatContext.Provider>
+      <ChatContext.Provider value={{
+        messages,
+        isLoading,
+        submitQuestion,
+        cancelGeneration,
+        decodeHtmlEntities,
+        retryGeneration,
+        retryingMessageIndex,
+        deleteMessage,
+        clearChat,
+      }}>
+        {children}
+      </ChatContext.Provider>
   );
-} 
+}

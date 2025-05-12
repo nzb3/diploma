@@ -78,7 +78,6 @@ export function ChatMessages({ messages, openResourceModal, isMobile = false }: 
             }}
           >
             {message.role === 'user' ? (
-              // User message with bubble
               <Paper
                 elevation={0}
                 sx={{
@@ -107,8 +106,7 @@ export function ChatMessages({ messages, openResourceModal, isMobile = false }: 
                 <FormatMessage message={message} openResourceModal={openResourceModal} />
               </Paper>
             ) : (
-              // Assistant message without bubble, full width
-              <Box 
+              <Box
                 sx={{
                   width: '100%',
                   display: 'flex',
@@ -130,7 +128,6 @@ export function ChatMessages({ messages, openResourceModal, isMobile = false }: 
                   mt: 2,
                   width: '100%'
                 }}>
-                  {/* End of message indicator */}
                   {message.complete && (
                     <Chip
                       icon={<DoneAllIcon fontSize="small" />}
@@ -152,17 +149,17 @@ export function ChatMessages({ messages, openResourceModal, isMobile = false }: 
                     />
                   )}
                   
-                  {message.role === 'assistant' && message.content && message.references && message.complete && (
+                  {message.role === 'assistant' ?
                     <Box sx={{ 
                       alignSelf: 'flex-end',
                       display: 'flex',
                       gap: 1,
                     }}>
-                      <DeleteMessageButton messageIndex={index} />
-                      <RetryAskButton messageIndex={index} />
-                      <SaveMessageAsResourceButton message={message}/>
-                    </Box>
-                  )}
+                        {message.stopped || message.complete    ? <DeleteMessageButton messageIndex={index} />      : null}
+                        {message.stopped || message.complete    ? <RetryAskButton messageIndex={index} />           : null}
+                        {message.complete   ? <SaveMessageAsResourceButton message={message}/>  : null}
+                    </Box> : null
+                  }
                 </Box>
               </Box>
             )}
