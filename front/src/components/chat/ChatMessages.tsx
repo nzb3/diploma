@@ -43,7 +43,7 @@ export function ChatMessages({ messages, openResourceModal, isMobile = false }: 
         <Box 
           sx={{ 
             width: '100%',
-            display: isMobile ? 'none' : 'flex', 
+            display: isTablet ? 'none' : 'flex', 
             justifyContent: 'flex-start',
             mb: 2,
             position: 'sticky',

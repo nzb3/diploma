@@ -1,11 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
-import { Box, TextField, Button, Paper, Select, MenuItem, FormControl, InputLabel, useMediaQuery, useTheme, Typography, Switch, FormControlLabel, IconButton, Menu, ListItemIcon, ListItemText } from '@mui/material';
+import { Box, TextField, Button, Paper, Select, MenuItem, FormControl, InputLabel, useMediaQuery, useTheme, Typography, Switch, FormControlLabel, IconButton, Menu } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
 import StopIcon from '@mui/icons-material/Stop';
 import HistoryIcon from '@mui/icons-material/History';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
-import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
 import { useChat } from '@/context/ChatContext';
+import { ClearChatButton } from './ClearChatButton';
 
 interface ChatInputProps {
   onSubmit: (question: string, numReferences: number, usePreviousMessages: boolean) => Promise<void>;
@@ -19,12 +19,20 @@ export function ChatInput({ onSubmit, onCancel, isLoading, isMobile = false }: C
   const [numReferences, setNumReferences] = useState<number>(5);
   const [usePreviousMessages, setUsePreviousMessages] = useState<boolean>(false);
   const [isFocused, setIsFocused] = useState(false);
-  const { clearChat, messages } = useChat();
+  const { messages } = useChat();
+  
   const inputRef = useRef<HTMLInputElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
+  
   const theme = useTheme();
+  
+
   const isTablet = useMediaQuery(theme.breakpoints.down('md'));
   const isVeryNarrow = useMediaQuery('(max-width:380px)');
+  
+
+  const showMenuButton = isTablet || isMobile;
+  const useCompactLayout = isMobile;
   
   const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null);
   const openMenu = Boolean(menuAnchorEl);
@@ -35,11 +43,6 @@ export function ChatInput({ onSubmit, onCancel, isLoading, isMobile = false }: C
   
   const handleMenuClose = () => {
     setMenuAnchorEl(null);
-  };
-  
-  const handleClearChat = () => {
-    clearChat();
-    handleMenuClose();
   };
   
   useEffect(() => {
@@ -96,23 +99,23 @@ export function ChatInput({ onSubmit, onCancel, isLoading, isMobile = false }: C
     <Paper 
       elevation={4} 
       sx={{ 
-        p: isMobile ? (isVeryNarrow ? 0.75 : 1) : 1.5, 
+        p: useCompactLayout ? (isVeryNarrow ? 0.75 : 1) : 1.5,
         borderTop: 1, 
         borderColor: 'divider',
         position: 'sticky',
         maxWidth: isMobile ? '100%' : isTablet ? '85%' : '50%',
-        bottom: isMobile ? 8 : 16,
+        bottom: useCompactLayout ? 8 : 16,
         mx: 'auto',
-        mb: isMobile ? 0.5 : 2,
+        mb: useCompactLayout ? 0.5 : 2,
         bgcolor: 'rgba(255, 255, 255, 0.9)',
         backdropFilter: 'blur(8px)',
-        borderRadius: isMobile ? 1.5 : 2,
+        borderRadius: useCompactLayout ? 1.5 : 2,
         boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)',
         zIndex: 10,
-        transform: isMobile ? 'none' : (isFocused ? 'translateY(-12px)' : 'translateY(-8px)'),
+        transform: useCompactLayout ? 'none' : (isFocused ? 'translateY(-12px)' : 'translateY(-8px)'),
         transition: 'all 0.2s ease-in-out',
         '&:hover': {
-          transform: isMobile ? 'none' : (isFocused ? 'translateY(-12px)' : 'translateY(-10px)'),
+          transform: useCompactLayout ? 'none' : (isFocused ? 'translateY(-12px)' : 'translateY(-10px)'),
           boxShadow: '0 6px 24px rgba(0, 0, 0, 0.15)',
         }
       }}
@@ -129,11 +132,11 @@ export function ChatInput({ onSubmit, onCancel, isLoading, isMobile = false }: C
       >
         <Box sx={{ 
           display: 'flex',
-          flexDirection: isMobile ? 'column' : 'row',
-          gap: isMobile ? 0.75 : 1.5,
+          flexDirection: useCompactLayout ? 'column' : 'row',
+          gap: useCompactLayout ? 0.75 : 1.5,
           width: '100%'
         }}>
-          {isMobile && messages.length > 0 && (
+          {showMenuButton && messages.length > 0 && (
             <Box 
               sx={{ 
                 alignSelf: 'flex-end', 
@@ -144,7 +147,7 @@ export function ChatInput({ onSubmit, onCancel, isLoading, isMobile = false }: C
               }}
             >
               <IconButton
-                size="small"
+                size={isMobile ? "small" : "medium"}
                 onClick={handleMenuClick}
                 ref={menuButtonRef}
                 aria-label="more options"
@@ -155,12 +158,13 @@ export function ChatInput({ onSubmit, onCancel, isLoading, isMobile = false }: C
                   color: theme.palette.text.secondary,
                   boxShadow: theme.shadows[1],
                   backgroundColor: theme.palette.background.paper,
+                  padding: isMobile ? 0.5 : 0.75,
                   '&:hover': {
                     backgroundColor: theme.palette.action.hover
                   }
                 }}
               >
-                <MoreVertIcon fontSize="small" />
+                <MoreVertIcon fontSize={isMobile ? "small" : "medium"} />
               </IconButton>
               <Menu
                 id="chat-menu"
@@ -184,27 +188,13 @@ export function ChatInput({ onSubmit, onCancel, isLoading, isMobile = false }: C
                     }
                   }
                 }}
-                MenuListProps={{
-                  sx: { padding: 0.5 }
-                }}
                 disableScrollLock
                 disableAutoFocus
                 disableEnforceFocus
                 disablePortal={false}
                 keepMounted={false}
               >
-                <MenuItem onClick={handleClearChat} dense>
-                  <ListItemIcon>
-                    <DeleteSweepIcon fontSize="small" color="error" />
-                  </ListItemIcon>
-                  <ListItemText 
-                    primary="Clear chat" 
-                    primaryTypographyProps={{ 
-                      color: theme.palette.error.main,
-                      fontSize: '0.875rem'
-                    }} 
-                  />
-                </MenuItem>
+                <ClearChatButton isMenuItem={true} onClose={handleMenuClose} />
               </Menu>
             </Box>
           )}
@@ -240,7 +230,7 @@ export function ChatInput({ onSubmit, onCancel, isLoading, isMobile = false }: C
                   borderColor: 'primary.main',
                   borderWidth: '2px',
                 },
-                fontSize: isMobile ? '0.85rem' : '0.9rem',
+                fontSize: useCompactLayout ? '0.85rem' : '0.9rem',
                 borderRadius: 1.5,
               },
               '& .MuiOutlinedInput-notchedOutline': {
@@ -250,7 +240,7 @@ export function ChatInput({ onSubmit, onCancel, isLoading, isMobile = false }: C
                 borderRadius: 1.5,
               },
               '& .MuiInputBase-input': {
-                padding: isMobile ? '8px 12px' : '10px 14px',
+                padding: useCompactLayout ? '8px 12px' : '10px 14px',
                 overflow: 'auto',
                 maxHeight: '150px',
                 transition: 'all 0.2s ease-in-out',
@@ -262,17 +252,18 @@ export function ChatInput({ onSubmit, onCancel, isLoading, isMobile = false }: C
               }
             }}
           />
-          <Box sx={{ 
+          
+          <Box sx={{
             display: 'flex',
             flexDirection: 'row',
             gap: 1,
-            width: isMobile ? '100%' : 'auto',
-            alignSelf: isMobile ? 'stretch' : input.length > 50 ? 'flex-start' : 'center',
+            width: useCompactLayout ? '100%' : 'auto',
+            alignSelf: useCompactLayout ? 'stretch' : input.length > 50 ? 'flex-start' : 'center',
             transition: 'all 0.2s ease-in-out',
           }}>
-            <FormControl sx={{ 
-              minWidth: isVeryNarrow ? 70 : (isMobile ? 80 : 100),
-              flex: isMobile ? 1 : 'none'
+            <FormControl sx={{
+              minWidth: isVeryNarrow ? 70 : (useCompactLayout ? 80 : 100),
+              flex: useCompactLayout ? 1 : 'none'
             }} size="small">
               <InputLabel id="references-label">Refs</InputLabel>
               <Select
@@ -284,7 +275,7 @@ export function ChatInput({ onSubmit, onCancel, isLoading, isMobile = false }: C
                 sx={{ 
                   borderRadius: 1.5,
                   '& .MuiSelect-select': {
-                    padding: isMobile ? '6px 12px' : '8px 14px',
+                    padding: useCompactLayout ? '6px 12px' : '8px 14px',
                   },
                 }}
               >
@@ -295,6 +286,7 @@ export function ChatInput({ onSubmit, onCancel, isLoading, isMobile = false }: C
                 <MenuItem value={20}>20</MenuItem>
               </Select>
             </FormControl>
+            
             {isLoading ? (
               <Button
                 variant="contained"
@@ -303,10 +295,10 @@ export function ChatInput({ onSubmit, onCancel, isLoading, isMobile = false }: C
                 onClick={onCancel}
                 startIcon={isVeryNarrow ? null : <StopIcon fontSize="small" />}
                 sx={{ 
-                  minWidth: isVeryNarrow ? 0 : (isMobile ? 0 : 90),
-                  flex: isMobile ? 1 : 'none',
-                  px: isVeryNarrow ? 1 : (isMobile ? 1.5 : 2),
-                  py: isMobile ? 0.5 : 0.75,
+                  minWidth: isVeryNarrow ? 0 : (useCompactLayout ? 0 : 90),
+                  flex: useCompactLayout ? 1 : 'none',
+                  px: isVeryNarrow ? 1 : (useCompactLayout ? 1.5 : 2),
+                  py: useCompactLayout ? 0.5 : 0.75,
                   borderRadius: 1.5,
                   boxShadow: 2,
                   '&:hover': {
@@ -326,10 +318,10 @@ export function ChatInput({ onSubmit, onCancel, isLoading, isMobile = false }: C
                 disabled={!input.trim() || isLoading || input.length > MAX_CHARS}
                 endIcon={isVeryNarrow ? null : <SendIcon fontSize="small" />}
                 sx={{ 
-                  minWidth: isVeryNarrow ? 0 : (isMobile ? 0 : 90),
-                  flex: isMobile ? 1 : 'none',
-                  px: isVeryNarrow ? 1 : (isMobile ? 1.5 : 2),
-                  py: isMobile ? 0.5 : 0.75,
+                  minWidth: isVeryNarrow ? 0 : (useCompactLayout ? 0 : 90),
+                  flex: useCompactLayout ? 1 : 'none',
+                  px: isVeryNarrow ? 1 : (useCompactLayout ? 1.5 : 2),
+                  py: useCompactLayout ? 0.5 : 0.75,
                   borderRadius: 1.5,
                   boxShadow: 2,
                   transition: 'all 0.2s ease-in-out',
@@ -345,7 +337,7 @@ export function ChatInput({ onSubmit, onCancel, isLoading, isMobile = false }: C
           </Box>
         </Box>
         
-        <Box sx={{ 
+        <Box sx={{
           display: 'flex', 
           justifyContent: 'space-between', 
           alignItems: 'center', 
@@ -354,7 +346,7 @@ export function ChatInput({ onSubmit, onCancel, isLoading, isMobile = false }: C
           <FormControlLabel
             control={
               <Switch
-                size={isMobile ? "small" : "medium"}
+                size={useCompactLayout ? "small" : "medium"}
                 checked={usePreviousMessages}
                 onChange={(e) => setUsePreviousMessages(e.target.checked)}
                 disabled={isLoading}
@@ -365,14 +357,14 @@ export function ChatInput({ onSubmit, onCancel, isLoading, isMobile = false }: C
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                 <HistoryIcon fontSize="small" color={usePreviousMessages ? "primary" : "disabled"} />
                 <Typography variant="caption" color={usePreviousMessages ? "primary" : "text.secondary"}>
-                  {isMobile ? "Use history" : "Use conversation history"}
+                  {useCompactLayout ? "Use history" : "Use conversation history"}
                 </Typography>
               </Box>
             }
             sx={{ 
               mr: 0,
               '& .MuiFormControlLabel-label': { 
-                fontSize: isMobile ? '0.75rem' : '0.8rem' 
+                fontSize: useCompactLayout ? '0.75rem' : '0.8rem' 
               }
             }}
           />
