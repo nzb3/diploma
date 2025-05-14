@@ -25,4 +25,21 @@ services:
       - "40000:40000"
   auth:
     command: start-dev
+    depends_on:
+      mailhog:
+        condition: service_started
+
+  mailhog:
+    image: mailhog/mailhog
+    hostname: mailhog
+    platform: linux/amd64
+    restart: always
+    ports:
+      - 1025:1025  # SMTP port
+      - 8025:8025  # Web UI port
+    networks:
+      webservices:
+        aliases:
+          - mailhog
+
 
