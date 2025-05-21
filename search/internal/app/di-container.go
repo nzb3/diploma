@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/nzb3/closer"
 	"github.com/nzb3/slogmanager"
 	"github.com/tmc/langchaingo/llms/ollama"
 	"gorm.io/driver/postgres"
@@ -21,10 +22,10 @@ import (
 	"github.com/nzb3/diploma/search/internal/controllers/searchcontroller"
 	"github.com/nzb3/diploma/search/internal/domain/services/resourceservcie"
 	"github.com/nzb3/diploma/search/internal/domain/services/searchservice"
-	"github.com/nzb3/diploma/search/internal/integration/embedder"
-	"github.com/nzb3/diploma/search/internal/integration/generator"
-	"github.com/nzb3/diploma/search/internal/integration/resourceprocessor"
 	"github.com/nzb3/diploma/search/internal/repository/gormpg"
+	"github.com/nzb3/diploma/search/internal/repository/integration/embedder"
+	"github.com/nzb3/diploma/search/internal/repository/integration/generator"
+	"github.com/nzb3/diploma/search/internal/repository/integration/resourceprocessor"
 	"github.com/nzb3/diploma/search/internal/repository/vectorstorage"
 	"github.com/nzb3/diploma/search/internal/server"
 )
@@ -314,6 +315,14 @@ func (sp *ServiceProvider) GormDB(ctx context.Context) *gorm.DB {
 	}
 
 	sp.gormDB = db
+
+	closer.Add(func() error {
+		sqlDB, err := db.DB()
+		if err != nil {
+			return fmt.Errorf("failed to get sql.DB instance: %w", err)
+		}
+		return sqlDB.Close()
+	})
 
 	return db
 }
