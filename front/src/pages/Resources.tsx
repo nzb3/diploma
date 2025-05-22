@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Resource,  } from '../types/api';
+import { Resource,  } from '@/types';
 import {
   ResourceList,
   ResourceModal,

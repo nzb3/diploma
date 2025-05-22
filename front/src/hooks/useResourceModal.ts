@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { getResource } from '@/services/api';
-import { Resource } from '@/types/api';
+import { Resource } from '@/types';
 
 interface UseResourceModalResult {
   isResourceModalOpen: boolean;

@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { streamAnswer, cancelStream } from '@/services/api';
-import { Message, CompleteResult, Reference } from '@/types/api';
+import { Message, CompleteResult, Reference } from '@/types';
 
 interface UseStreamingAnswerResult {
   isLoading: boolean;

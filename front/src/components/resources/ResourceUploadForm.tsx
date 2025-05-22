@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from 'react';
-import { SaveDocumentRequest } from '@/types/api.ts';
+import { SaveDocumentRequest } from '@/types';
 import {
   Paper,
   Typography,
