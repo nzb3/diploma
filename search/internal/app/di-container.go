@@ -79,7 +79,7 @@ func (sp *ServiceProvider) EmbeddingLLM(ctx context.Context) *ollama.LLM {
 
 	llm, err := ollama.New(
 		ollama.WithServerURL("http://ollama-embedder:11434/"),
-		ollama.WithModel("mxbai-embed-large"),
+		ollama.WithModel("bge-m3"),
 	)
 	if err != nil {
 		sp.Logger(ctx).Logger().Error("error creating ollama embedding LLM", "error", err.Error())
@@ -98,7 +98,7 @@ func (sp *ServiceProvider) GeneratingLLM(ctx context.Context) *ollama.LLM {
 	}
 
 	llm, err := ollama.New(ollama.WithServerURL("http://ollama-generator:11434/"),
-		ollama.WithModel("gemma3:1b"),
+		ollama.WithModel("gemma3:4b-it-qat"),
 	)
 	if err != nil {
 		sp.Logger(ctx).Logger().Error("error creating ollama generating LLM", "error", err.Error())

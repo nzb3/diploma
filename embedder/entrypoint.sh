@@ -3,8 +3,8 @@
 ollama serve &
 sleep 5
 # Pull the desired model
-echo "Pulling mxbai-embed-large model..."
-ollama pull mxbai-embed-large
+echo "Pulling model..."
+ollama pull bge-m3:latest
 
 # Keep the container running
 wait
