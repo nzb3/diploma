@@ -10,19 +10,6 @@ export interface Resource {
   raw_content?: string;
 }
 
-export interface Notification {
-  id: string;
-  message: string;
-  type: 'error' | 'warning' | 'info' | 'success';
-  timeout?: number;
-}
-
-export interface NotificationContextType {
-  notifications: Notification[];
-  addNotification: (message: string, type: Notification['type'], timeout?: number) => void;
-  removeNotification: (id: string) => void;
-}
-
 export interface ResourceEvent {
   id: string;
   status: string;
@@ -53,14 +40,6 @@ export interface AskRequest {
 }
 
 export interface AskResponse {
-  answer: string;
-  references: Array<{
-    resource_id: string;
-    content: string;
-  }>;
-}
-
-export interface SearchResult {
   answer: string;
   references: Array<{
     resource_id: string;
