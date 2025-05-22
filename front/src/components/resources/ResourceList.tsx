@@ -1,4 +1,4 @@
-import { Resource } from '@/types/api';
+import { Resource } from '@/types';
 import { ResourceListItem, ResourceLegend  } from '@/components';
 import {
   Box,

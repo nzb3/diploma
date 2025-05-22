@@ -1,5 +1,5 @@
 import {Box, Typography, useTheme, useMediaQuery} from "@mui/material";
-import { Message } from '@/types/api';
+import { Message } from '@/types';
 import { MarkdownRenderer, ReferencesList } from '@/components';
 import ChatIcon from '@mui/icons-material/Chat';
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Resource, Reference } from '@/types/api';
+import { Resource, Reference } from '@/types';
 import { 
     Typography, 
     Box, 

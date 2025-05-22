@@ -1,4 +1,4 @@
-import { Resource, UpdateResourceRequest } from '@/types/api';
+import { Resource, UpdateResourceRequest } from '@/types';
 import {
   Dialog,
   DialogTitle,

@@ -127,12 +127,9 @@ export function MainLayout({ children }: MainLayoutProps) {
                             </Box>
                         )}
 
-                        {/* Right section with auth and menu */}
                         <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                            {/* Auth Buttons - Always visible */}
                             <AuthButtons />
 
-                            {/* Mobile Menu Button - Only visible on mobile */}
                             {isMobile && (
                                 <IconButton
                                     color="inherit"
@@ -148,7 +145,6 @@ export function MainLayout({ children }: MainLayoutProps) {
                                 </IconButton>
                             )}
 
-                            {/* Mobile Menu Dropdown */}
                             <Menu
                                 anchorEl={anchorEl}
                                 open={Boolean(anchorEl)}

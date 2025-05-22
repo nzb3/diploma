@@ -1,7 +1,7 @@
 import { useRef, useEffect } from 'react';
 import { Box, Paper, useTheme, useMediaQuery, Chip, alpha } from '@mui/material';
 import { FormatMessage } from '@/components';
-import { Message } from '@/types/api';
+import { Message } from '@/types';
 import {SaveMessageAsResourceButton} from "@components/chat/SaveMessageAsResourceButton.tsx";
 import {RetryAskButton} from "@components/chat/RetryAskButton.tsx";
 import {DeleteMessageButton} from "@components/chat/DeleteMessageButton.tsx";
