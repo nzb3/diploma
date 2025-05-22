@@ -4,6 +4,7 @@ services:
     container_name: front
     ports:
       - "80:80"
+    restart: on-failure
     depends_on:
       search:
         condition: service_started
@@ -27,6 +28,7 @@ services:
       target: release
       dockerfile: Dockerfile
     container_name: search
+    restart: on-failure
     env_file:
       - search/.env
     ports:
@@ -64,7 +66,7 @@ services:
       - ./generator/.data:/root/.ollama
       - ./generator/entrypoint.sh:/entrypoint.sh
     entrypoint: ["/bin/bash", "/entrypoint.sh"]
-    restart: unless-stopped
+    restart: on-failure
     networks:
       webservices:
         aliases:
@@ -91,7 +93,7 @@ services:
       - ./embedder/.data:/root/.ollama
       - ./embedder/entrypoint.sh:/entrypoint.sh
     entrypoint: ["/bin/bash", "/entrypoint.sh"]
-    restart: unless-stopped
+    restart: on-failure
     networks:
       webservices:
         aliases:
@@ -124,6 +126,7 @@ services:
       KC_HOSTNAME_STRICT_HTTPS: 'false'
       KC_HTTP_ENABLED: 'true'
     command: start
+    restart: on-failure
     depends_on:
       auth_database:
         condition: service_healthy
@@ -146,6 +149,7 @@ services:
       - POSTGRES_PASSWORD=${AUTH_DB_PASSWORD}
     ports:
       - ${AUTH_DB_PORT}:5432
+    restart: on-failure
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U ${AUTH_DB_NAME} -d ${AUTH_DB_NAME}" ]
       interval: 5s
@@ -171,6 +175,7 @@ services:
     volumes:
       - ./search_database/.data:/var/lib/postgresql/.data
       - ./search_database/scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+    restart: on-failure
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U ${SEARCH_DB_USER} -d ${SEARCH_DB_NAME}" ]
       interval: 5s
