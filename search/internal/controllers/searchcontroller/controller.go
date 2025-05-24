@@ -187,7 +187,7 @@ func (c *Controller) handleReferences(ctx *gin.Context, processID uuid.UUID, ref
 	slog.Debug("Processing reference",
 		"process_id", processID,
 		"references", references)
-	controllers.SendSSEEvent(ctx, "resources", gin.H{
+	controllers.SendSSEEvent(ctx, "references", gin.H{
 		"process_id": processID,
 		"references": references,
 		"complete":   false,

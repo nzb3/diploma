@@ -198,10 +198,7 @@ export function ChatProvider({ children }: ChatProviderProps) {
       }
     });
 
-    eventSource.addEventListener('message', resetActivityTimer);
-    eventSource.addEventListener('resources', resetActivityTimer);
-
-    eventSource.addEventListener('resources', (event) => {
+    eventSource.addEventListener('references', (event) => {
       resetActivityTimer();
 
       try {
