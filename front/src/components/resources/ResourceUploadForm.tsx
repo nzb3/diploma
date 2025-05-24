@@ -21,6 +21,7 @@ import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
 import TextSnippetIcon from '@mui/icons-material/TextSnippet';
 import {safeBase64Encode} from "@services/utils.ts";
 import {FormEvent, DragEvent, ChangeEvent} from "react";
+import {useResourceManagement} from "@/hooks";
 
 interface ResourceUploadFormProps {
   onUpload: (data: SaveDocumentRequest) => Promise<void>;
@@ -40,7 +41,9 @@ export function ResourceUploadForm({ onUpload, isUploading }: ResourceUploadForm
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dropZoneRef = useRef<HTMLDivElement>(null);
-
+  const {
+    loadResources,
+  } = useResourceManagement()
   const resetForm = () => {
     setName('');
     setContent('');
@@ -82,6 +85,7 @@ export function ResourceUploadForm({ onUpload, isUploading }: ResourceUploadForm
       });
     }
     resetForm();
+    await loadResources();
   };
 
   const processFile = (file: File) => {

@@ -33,6 +33,10 @@ export default function ResourcesPage() {
 
   useEffect(() => {
     loadResources();
+
+    setInterval(() => {
+      loadResources();
+    }, 60000);
   }, []);
 
   const handleResourceClick = async (resource: Resource) => {
