@@ -357,6 +357,14 @@ func (s *VectorStorage) setupRetriever(filters map[string]interface{}, numResult
 	return &retriever
 }
 
+func (s *VectorStorage) setupChains(retriever *vectorstores.Retriever) (chains.Chain, error) {
+	qaChain := s.setupRetrievalQA(retriever)
+
+	return chains.NewSimpleSequentialChain(
+		[]chains.Chain{qaChain},
+	)
+}
+
 func (s *VectorStorage) setupRetrievalQA(retriever *vectorstores.Retriever) chains.RetrievalQA {
 	customPromptText := `Use the following pieces of context to answer the question at the end. If you don't know the answer, just say that you don't know, don't try to make up an answer
 
@@ -382,14 +390,6 @@ Helpful Answer:
 	return chains.NewRetrievalQA(
 		chains.NewStuffDocuments(llmChain),
 		retriever,
-	)
-}
-
-func (s *VectorStorage) setupChains(retriever *vectorstores.Retriever) (chains.Chain, error) {
-	qaChain := s.setupRetrievalQA(retriever)
-
-	return chains.NewSimpleSequentialChain(
-		[]chains.Chain{qaChain},
 	)
 }
 
