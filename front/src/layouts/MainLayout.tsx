@@ -74,22 +74,8 @@ export function MainLayout({ children }: MainLayoutProps) {
                             minHeight: { xs: 56, sm: 64 }
                         }}
                     >
-                        <Button
-                            component={Link}
+                        <Link
                             to="/"
-                            sx={{ padding: 0, minWidth: 'auto' }}
-                            startIcon={
-                                <Box 
-                                    component="img"
-                                    src="/deltanotes.svg"
-                                    alt="DeltaNotes Logo"
-                                    sx={{
-                                        width: 24,
-                                        height: 24,
-                                        mr: 1
-                                    }}
-                                />
-                            }
                         >
                             <Typography
                                 variant="h6"
@@ -103,7 +89,7 @@ export function MainLayout({ children }: MainLayoutProps) {
                             >
                                 DeltaNotes AI
                             </Typography>
-                        </Button>
+                        </Link>
 
                         {!isMobile && (
                             <Box sx={{ display: 'flex', gap: 1, mx: 2 }}>
