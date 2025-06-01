@@ -173,7 +173,7 @@ services:
     ports:
       - ${SEARCH_DB_PORT}:5432
     volumes:
-      - ./search_database/.data:/var/lib/postgresql/.data
+      - ./search_database/.data:/var/lib/postgresql/data
       - ./search_database/scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
     restart: on-failure
     healthcheck:
