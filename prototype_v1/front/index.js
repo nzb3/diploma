@@ -10,7 +10,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const textInput = document.getElementById('textInput');
     const textUploadBtn = document.getElementById('textUploadBtn');
 
-    const basePath = "https://search.prototype.orb.local"
+    const basePath = "https://localhost:8080";
 
     function utf8ToBase64(str) {
         const encoder = new TextEncoder();
@@ -19,7 +19,6 @@ document.addEventListener('DOMContentLoaded', function() {
         return btoa(binString);
     }
 
-    // Add message to the answer area
     function addMessage(text, isQuestion) {
         const messageDiv = document.createElement('div');
         messageDiv.className = isQuestion ? 'message question' : 'message answer';
@@ -28,7 +27,6 @@ document.addEventListener('DOMContentLoaded', function() {
         answerArea.scrollTop = answerArea.scrollHeight;
     }
 
-    // Search button click handler
     searchBtn.addEventListener('click', function() {
         const query = searchInput.value.trim();
         if (!query) return;
@@ -63,7 +61,6 @@ document.addEventListener('DOMContentLoaded', function() {
         searchInput.value = '';
     });
 
-    // Ask button click handler
     askBtn.addEventListener('click', function() {
         const question = searchInput.value.trim();
         if (!question) return;
@@ -94,7 +91,6 @@ document.addEventListener('DOMContentLoaded', function() {
         searchInput.value = '';
     });
 
-    // URL upload button click handler
     urlUploadBtn.addEventListener('click', function() {
         const url = urlInput.value.trim();
         if (!url) return;
@@ -124,7 +120,6 @@ document.addEventListener('DOMContentLoaded', function() {
         urlInput.value = '';
     });
 
-    // PDF upload button click handler
     pdfUploadBtn.addEventListener('click', function() {
         const file = pdfInput.files[0];
         if (!file) {
@@ -163,7 +158,6 @@ document.addEventListener('DOMContentLoaded', function() {
         pdfInput.value = '';
     });
 
-    // Text upload button click handler
     textUploadBtn.addEventListener('click', function() {
         const text = textInput.value.trim();
         if (!text) {
@@ -177,7 +171,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                content: utf8ToBase64(text), // Convert to base64
+                content: utf8ToBase64(text),
                 type: 'text'
             })
         })
@@ -196,14 +190,12 @@ document.addEventListener('DOMContentLoaded', function() {
         textInput.value = '';
     });
 
-    // Allow pressing Enter in search input to trigger search
     searchInput.addEventListener('keypress', function(e) {
         if (e.key === 'Enter') {
             searchBtn.click();
         }
     });
 
-    // Allow pressing Enter in URL input to trigger upload
     urlInput.addEventListener('keypress', function(e) {
         if (e.key === 'Enter') {
             urlUploadBtn.click();
