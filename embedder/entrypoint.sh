@@ -6,5 +6,4 @@ sleep 5
 echo "Pulling model..."
 ollama pull bge-m3:latest
 
-# Keep the container running
 wait
