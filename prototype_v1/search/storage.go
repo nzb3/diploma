@@ -34,6 +34,7 @@ func NewStorage(ctx context.Context, embedder embeddings.Embedder, generator llm
 	store, err := pgvector.New(
 		ctx,
 		pgvector.WithEmbedder(embedder),
+		pgvector.WithVectorDimensions(1024),
 		pgvector.WithConnectionURL("postgres://postgres:postgres@postgres:5432/postgres?sslmode=disable"),
 	)
 
