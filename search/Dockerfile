@@ -8,7 +8,7 @@ RUN go build -gcflags="all=-N -l" -o server ./cmd/main/main.go
 
 FROM alpine AS debug
 WORKDIR /app
-RUN apk add --no-cache libffi mupdf mupdf-dev
+RUN apk add mupdf-dev=1.24.10-r0 --repository=https://dl-cdn.alpinelinux.org/alpine/v3.21/community
 COPY --from=builder-debug /app/server .
 COPY --from=builder-debug /app/configs/ ./configs
 COPY --from=builder-debug /go/bin/dlv .
@@ -24,8 +24,9 @@ COPY . .
 RUN go build -o server ./cmd/main/main.go
 
 FROM alpine AS release
+ENV GIN_MODE=release
 WORKDIR /app
-RUN apk add --no-cache libffi mupdf mupdf-dev
+RUN apk add mupdf-dev=1.24.10-r0 --repository=https://dl-cdn.alpinelinux.org/alpine/v3.21/community
 COPY --from=builder-release /app/server .
 COPY --from=builder-release /app/configs/ ./configs
 EXPOSE 8081
