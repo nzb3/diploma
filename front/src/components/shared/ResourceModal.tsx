@@ -44,6 +44,7 @@ export function ResourceModal({
                               }: ResourceModalProps) {
   const { updateResourceById } = useResourceManagement();
   const [isEditMode, setIsEditMode] = useState(propsIsEditable);
+  const [contentEdited, setContentEdited] = useState(false);
 
   const [dataForUpdate, setDataForUpdate] = useState<UpdateResourceRequest>({
     name: '',
@@ -65,17 +66,23 @@ export function ResourceModal({
   }, [propsIsEditable]);
 
   const onUpdate = async () => {
+    const data = dataForUpdate;
     if (resource && resource.id) {
-      if (dataForUpdate.content) {
-        dataForUpdate.content = safeBase64Encode(dataForUpdate.content);
+      try {
+        if (data.content) {
+          data.content = contentEdited ? safeBase64Encode(data.content) : undefined;
+        }
+        await updateResourceById(data);
+        handleClose();
+      } catch (error) {
+        console.error("Update failed:", error);
       }
-      await updateResourceById(dataForUpdate);
-      setIsEditMode(false);
     }
   };
 
   const handleClose = () => {
     setIsEditMode(false);
+    setContentEdited(false);
     onClose();
   }
 
@@ -102,6 +109,7 @@ export function ResourceModal({
       ...prev,
       content: e.target.value
     }));
+    setContentEdited(true);
   };
 
   const decodeContent = (content: string | undefined): string => {
@@ -183,7 +191,7 @@ export function ResourceModal({
                 </Box>
                 <IconButton
                     aria-label="close"
-                    onClick={onClose}
+                    onClick={handleClose}
                     sx={{
                       color: (theme) => theme.palette.grey[500],
                     }}
