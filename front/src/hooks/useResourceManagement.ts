@@ -17,6 +17,7 @@ interface UseResourceManagementResult {
     deleteResourceById: (id: string) => Promise<void>;
     updateResourceById: (data: UpdateResourceRequest) => Promise<Resource>;
     refreshResources: () => Promise<void>;
+    cleanupResources: () => void;
 }
 
 export function useResourceManagement(): UseResourceManagementResult {
@@ -38,6 +39,10 @@ export function useResourceManagement(): UseResourceManagementResult {
             setIsLoading(false);
         }
     }, [isLoading]);
+
+    const cleanupResources = useCallback(() => {
+        setResources([]);
+    }, [setResources])
 
     const uploadResource = useCallback(async (data: SaveDocumentRequest) => {
         setIsUploading(true);
@@ -129,5 +134,6 @@ export function useResourceManagement(): UseResourceManagementResult {
         deleteResourceById,
         refreshResources,
         updateResourceById,
+        cleanupResources,
     };
 }
