@@ -347,10 +347,18 @@ func getUserID(ctx context.Context) (string, error) {
 	return userID, nil
 }
 
-func (s *VectorStorage) setupRetriever(filters map[string]interface{}, numResults int, callbackHandler ...*callback.Handler) *vectorstores.Retriever {
+func (s *VectorStorage) setupRetriever(filters map[string]interface{},
+	numResults int,
+	callbackHandler ...*callback.Handler,
+) *vectorstores.Retriever {
 	slog.DebugContext(context.Background(), "Configuring retriever",
 		"num_results", numResults)
-	retriever := vectorstores.ToRetriever(s.vectorStore, numResults, vectorstores.WithFilters(filters), vectorstores.WithScoreThreshold(0.5))
+	retriever := vectorstores.ToRetriever(
+		s.vectorStore,
+		numResults,
+		vectorstores.WithFilters(filters),
+		vectorstores.WithScoreThreshold(0.5),
+	)
 	if len(callbackHandler) > 0 {
 		retriever.CallbacksHandler = callbackHandler[0]
 	}
