@@ -18,6 +18,9 @@ export const getStatusDescription = (status: string) => {
 export const safeBase64Encode = (str: string): string => {
     const encoder = new TextEncoder();
     const utf8Bytes = encoder.encode(str);
-    const binaryString = String.fromCharCode(...utf8Bytes);
+    let binaryString = '';
+    for (let i = 0; i < utf8Bytes.length; i++) {
+        binaryString += String.fromCharCode(utf8Bytes[i]);
+    }
     return btoa(binaryString);
 };
