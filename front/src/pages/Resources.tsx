@@ -34,15 +34,18 @@ export default function ResourcesPage() {
   useEffect(() => {
     loadResources();
 
-    setInterval(() => {
+    const interval = setInterval(() => {
       loadResources();
     }, 60000);
+    return () => {
+      clearInterval(interval);
+    }
   }, []);
 
   const handleResourceClick = async (resource: Resource) => {
     console.log('Resource clicked:', resource);
     if (resource.id) {
-      openResourceModal(resource.id)
+      await openResourceModal(resource.id)
     }
   };
 
