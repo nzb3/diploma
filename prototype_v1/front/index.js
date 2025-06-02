@@ -10,7 +10,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const textInput = document.getElementById('textInput');
     const textUploadBtn = document.getElementById('textUploadBtn');
 
-    const basePath = "https://localhost:8080";
+    const basePath = `${window.location.origin}/api`;
 
     function utf8ToBase64(str) {
         const encoder = new TextEncoder();

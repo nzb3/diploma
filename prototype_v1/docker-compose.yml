@@ -1,11 +1,11 @@
 services:
-  front:
+  front-prototype:
     build: ./front
-    container_name: front
+    container_name: front-prototype
     ports:
-      - "80:80"
+      - "82:80"
     depends_on:
-      search:
+      search-prototype:
         condition: service_started
     networks:
       - webservices
@@ -18,17 +18,17 @@ services:
             - node_modules/
         - action: rebuild
           path: ./front/Dockerfile
-  search:
+  search-prototype:
     build: ./search
-    container_name: search
-    ports:
-      - "8080:8080"
+    container_name: search-prototype
+    expose:
+      - "8080"
     depends_on:
-      ollama-embedder:
+      ollama-embedder-prototype:
         condition: service_started
-      ollama-generator:
+      ollama-generator-prototype:
         condition: service_started
-      postgres:
+      postgres-prototype:
         condition: service_healthy
     networks:
       - webservices
@@ -42,12 +42,12 @@ services:
         - action: rebuild
           path: ./search/Dockerfile
 
-  ollama-generator:
+  ollama-generator-prototype:
     image: ollama/ollama
-    container_name: ollama-generator
+    container_name: ollama-generator-prototype
     hostname: ollama-generator
-    ports:
-      - "11434:11434"
+    expose:
+      - "11434"
     volumes:
       - ./generator/.data:/root/.ollama
       - ./generator/entrypoint.sh:/entrypoint.sh
@@ -65,12 +65,12 @@ services:
         - action: rebuild
           path: ./generator/Dockerfile
 
-  ollama-embedder:
+  ollama-embedder-prototype:
     image: ollama/ollama
-    container_name: ollama-embedder
+    container_name: ollama-embedder-prototype
     hostname: ollama-embedder
-    ports:
-      - "11435:11434"
+    expose:
+      - "11434"
     volumes:
       - ./embedder/.data:/root/.ollama
       - ./embedder/entrypoint.sh:/entrypoint.sh
@@ -88,9 +88,9 @@ services:
         - action: rebuild
           path: ./embedder/Dockerfile
 
-  postgres:
+  postgres-prototype:
     image: pgvector/pgvector:pg17
-    container_name: postgres
+    container_name: postgres-prototype
     hostname: postgres
     env_file:
       - ./.env
@@ -98,8 +98,8 @@ services:
       - POSTGRES_USER=${SEARCH_DB_USER}
       - POSTGRES_PASSWORD=${SEARCH_DB_PASSWORD}
       - POSTGRES_DB=${SEARCH_DB_NAME}
-    ports:
-      - ${SEARCH_DB_PORT}:${SEARCH_DB_PORT}
+    expose:
+      - ${SEARCH_DB_PORT}
     volumes:
       - ./postgres/.data:/var/lib/postgresql/.data
       - ./postgres/scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
