@@ -14,7 +14,7 @@ type generator struct {
 
 func NewGenerator() (*generator, error) {
 	llm, err := ollama.New(
-		ollama.WithServerURL("http://ollama-generator:11434/"),
+		ollama.WithServerURL("http://ollama-generator-prototype:11434/"),
 		ollama.WithModel("gemma3:1b"),
 	)
 	if err != nil {

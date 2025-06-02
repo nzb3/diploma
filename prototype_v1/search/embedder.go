@@ -13,7 +13,7 @@ type embedder struct {
 
 func NewEmbedder() (*embedder, error) {
 	llm, err := ollama.New(
-		ollama.WithServerURL("http://ollama-embedder:11434/"),
+		ollama.WithServerURL("http://ollama-embedder-prototype:11434/"),
 		ollama.WithModel("bge-m3:latest"),
 	)
 
