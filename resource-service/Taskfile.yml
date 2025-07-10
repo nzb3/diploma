@@ -1,0 +1,47 @@
+version: '3'
+
+vars:
+  DB_DSN: "postgres://postgres:postgres@localhost:5433/postgres?sslmode=disable"
+  MIGRATIONS_DIR: "./migrations"
+
+tasks:
+  new-migration:
+    desc: Create a new migration file
+    dir: "{{.TASKFILE_DIR}}"
+    cmds:
+      - |
+        if [ -z "{{.NAME}}" ]; then
+          echo "Usage: task new-migration NAME=your_migration_name"
+          exit 1
+        fi
+        go tool goose -dir {{.MIGRATIONS_DIR}} create {{.NAME}} sql
+
+  migrate-up:
+    desc: Apply all pending migrations
+    dir: "{{.TASKFILE_DIR}}"
+    cmds:
+      - go tool goose -dir {{.MIGRATIONS_DIR}} postgres "{{.DB_DSN}}" up
+
+  migrate-down:
+    desc: Rollback the last migration
+    dir: "{{.TASKFILE_DIR}}"
+    cmds:
+      - go tool goose -dir {{.MIGRATIONS_DIR}} postgres "{{.DB_DSN}}" down
+
+  migrate-status:
+    desc: Show migration status
+    dir: "{{.TASKFILE_DIR}}"
+    cmds:
+      - go tool goose -dir {{.MIGRATIONS_DIR}} postgres "{{.DB_DSN}}" status
+
+  migrate-reset:
+    desc: Reset database (rollback all migrations)
+    dir: "{{.TASKFILE_DIR}}"
+    cmds:
+      - go tool goose -dir {{.MIGRATIONS_DIR}} postgres "{{.DB_DSN}}" reset
+
+  sqlc-generate:
+    desc: Generate sqlc code
+    dir: "{{.TASKFILE_DIR}}"
+    cmds:
+      - go tool sqlc generate

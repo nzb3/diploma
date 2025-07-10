@@ -16,13 +16,26 @@ services:
       - "5173:5173"
     environment:
       - CHOKIDAR_USEPOLLING=true
-  search:
+  search_service:
     build:
       target: debug
     environment:
       - GIN_DEBUG=true
     ports:
       - "40000:40000"
+  search_database:
+    # Inherits all settings from docker-compose.yml
+  resource_service:
+    build:
+      target: debug
+    environment:
+      - GIN_DEBUG=true
+    ports:
+      - "40001:40001"
+  resource_database:
+    # Inherits all settings from docker-compose.yml
+  auth_database:
+    # Inherits all settings from docker-compose.yml
   auth:
     command: start-dev
     depends_on:
