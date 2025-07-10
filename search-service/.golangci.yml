@@ -1,0 +1,162 @@
+version: "2"
+
+# Options for analysis running
+run:
+  # Timeout for total work
+  timeout: 5m
+
+  # Include test files
+  tests: true
+
+  # Set Go version to 1.24
+  go: '1.24'
+
+  # Set exit code when issues are found
+  issues-exit-code: 1
+
+  # Relative path mode - use gomod to ensure paths are relative to go.mod file
+  relative-path-mode: gomod
+
+  # Set modules download mode to readonly to prevent automatic updates
+  modules-download-mode: readonly
+
+  # Allow parallel runners for CI environments
+  allow-parallel-runners: true
+
+  # Set concurrency based on available CPUs
+  concurrency: 4
+
+formatters:
+  enable:
+#    - gofmt        # Checks if code was gofmt-ed
+#    - gofumpt      # Checks whether code was gofumpt-ed
+    - goimports    # Checks imports are formatted according to goimports
+
+# Linters configuration
+linters:
+  enable:
+    - asasalint     # Checks for pass of non-pointer variables to variadic functions
+    - asciicheck    # Checks that code doesn't contain non-ASCII identifiers
+    - bidichk       # Checks for dangerous unicode character sequences
+    - bodyclose     # Checks whether HTTP response body is closed
+    - containedctx  # Detects struct contained context.Context field
+    - contextcheck  # Checks the function whether use a non-inherited context
+    - copyloopvar   # Detects places where loop variables are copied
+    - cyclop        # Checks function and package cyclomatic complexity
+    - decorder      # Checks declaration order and count of types, constants, variables and functions
+#    - depguard      # Checks if package imports are in a list of acceptable packages
+    - dogsled       # Checks assignments with too many blank identifiers
+    - dupl          # Detects code clones
+    - durationcheck # Checks for two durations multiplied together
+    - errcheck      # Checks for unchecked errors
+    - errchkjson    # Checks types passed to the json encoding functions
+    - errname       # Checks that sentinel errors are prefixed with the Err and error types are suffixed with the Error
+    - errorlint     # Checks for errors not wrapped correctly
+    - exhaustive    # Checks exhaustiveness of enum switch statements
+    - forbidigo     # Forbids identifiers
+    - funlen        # Detects long functions
+    - gochecknoglobals # Checks that no globals are present
+    - gochecknoinits   # Checks that no init functions are present
+    - gocognit     # Computes and checks the cognitive complexity
+    - goconst      # Finds repeated strings that could be replaced by a constant
+    - gocritic     # Provides diagnostics that check for bugs, performance and style issues
+    - gocyclo      # Computes and checks the cyclomatic complexity
+#    - godot        # Checks if comments end with a period
+    - goheader     # Checks is file header matches to pattern
+    - goprintffuncname # Checks that printf-like functions are named with f at the end
+    - gosec        # Inspects source code for security problems
+    - govet        # Reports suspicious constructs
+    - grouper      # Analyzes expression groups
+    - importas     # Enforces consistent import aliases
+    - ineffassign  # Detects when assignments to existing variables are not used
+    - interfacebloat # Checks that interfaces don't contain too many methods
+    - lll          # Reports long lines
+    - loggercheck  # Checks key value pairs for common logger libraries
+    - makezero     # Finds slice declarations with non-zero initial length
+    - misspell     # Finds commonly misspelled English words
+    - nakedret     # Finds naked returns
+    - nestif       # Reports deeply nested if statements
+    - nilerr       # Finds the code that returns nil even if it checks that the error is not nil
+    - nilnil       # Checks that there is no simultaneous return of nil error and invalid value
+    - noctx        # Finds sending http request without context.Context
+    - nolintlint   # Reports ill-formed or insufficient nolint directives
+    - nonamedreturns # Reports all named returns
+    - nosprintfhostport # Checks for misuse of Sprintf to construct a host with port
+    - prealloc     # Finds slice declarations that could potentially be preallocated
+    - predeclared  # Finds code that shadows predeclared identifiers
+    - promlinter   # Checks Prometheus metrics naming
+    - reassign     # Checks that package variables are not reassigned
+    - revive       # Fast, configurable, extensible, flexible, and beautiful linter for Go
+    - rowserrcheck # Checks whether Err of rows is checked
+    - sloglint     # Ensures consistent use of the slog structured logging library
+    - sqlclosecheck # Checks that sql.Rows and sql.Stmt are closed
+    - staticcheck  # Go static analysis
+    - tagalign     # Checks that struct tags are well aligned
+    - testpackage  # Makes you use a separate _test package
+    - thelper      # Detects golang test helpers without t.Helper() call
+    - tparallel    # Detects inappropriate usage of t.Parallel()
+    - unconvert    # Removes unnecessary type conversions
+    - unparam      # Reports unused function parameters
+    - unused       # Checks for unused constants, variables, functions and types
+    - usestdlibvars # Detects the possibility to use variables/constants from the Go standard library
+#    - whitespace   # Checks for unnecessary newlines and trailing whitespace
+    - wrapcheck    # Checks that errors returned from external packages are wrapped
+    - zerologlint  # Detects the wrong usage of zerolog that a user forgets to dispatch zerolog.Event
+
+
+  exclusions:
+    rules:
+      # Exclude some linters from running on tests files
+      - path: _test\.go
+        linters:
+          - gocyclo
+          - errcheck
+          - dupl
+          - gosec
+
+# Issues configuration
+issues:
+  # Maximum issues count per one linter
+  max-issues-per-linter: 0
+
+  # Maximum count of issues with the same text
+  max-same-issues: 0
+
+  # Make issues output unique by line
+  uniq-by-line: true
+
+  # Fix found issues (if it's supported by the linter)
+  fix: false
+
+# Output configuration
+output:
+  # Show statistics per linter
+  show-stats: true
+
+  # Sort order for output
+  sort-order:
+    - linter
+    - severity
+    - file
+
+  # Format settings
+  formats:
+    text:
+      # Use colors in output
+      colors: true
+      # Print linter name in the end of issue text
+      print-linter-name: true
+
+# Severity configuration
+severity:
+  # Default severity for issues
+  default: error
+
+  # Define severity rules
+  rules:
+    - linters:
+        - dupl
+      severity: warning
+    - linters:
+        - gosec
+      severity: warning

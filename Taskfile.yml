@@ -1,5 +1,7 @@
 version: '3'
-
+includes:
+  resource-service:
+    taskfile: ./resource-service/Taskfile.yml
 tasks:
   run-debug:
     cmds:
@@ -16,13 +18,29 @@ tasks:
   run-frontend-local:
     cmds:
       - cd front && npm run dev
+  recreate-search-debug:
+    cmds:
+      - docker compose -f docker-compose.yml -f docker-compose.debug.yml up --force-recreate --no-deps search_service --build -d
+    silent: true
+  recreate-search-prod:
+    cmds:
+      - docker compose -f docker-compose.yml up --force-recreate --no-deps search_service --build -d
+    silent: true
+  recreate-resource-debug:
+    cmds:
+      - docker compose -f docker-compose.yml -f docker-compose.debug.yml up --force-recreate --no-deps resource_service --build -d
+    silent: true
+  recreate-resource-prod:
+    cmds:
+      - docker compose -f docker-compose.yml up --force-recreate --no-deps resource_service --build -d
+    silent: true
   recreate-backend-debug:
     cmds:
-      - docker compose -f docker-compose.yml -f docker-compose.debug.yml up --force-recreate --no-deps search --build -d
+      - docker compose -f docker-compose.yml -f docker-compose.debug.yml up --force-recreate --no-deps search_service resource_service --build -d
     silent: true
   recreate-backend-prod:
     cmds:
-      - docker compose -f docker-compose.yml -f docker-compose.prod.yml up --force-recreate --no-deps search --build -d
+      - docker compose -f docker-compose.yml up --force-recreate --no-deps search_service resource_service --build -d
     silent: true
   down-all-delete-search_db:
     cmds:

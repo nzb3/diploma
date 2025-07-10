@@ -6,7 +6,9 @@ services:
       - "80:80"
     restart: on-failure
     depends_on:
-      search:
+      search-service:
+        condition: service_started
+      resource-service:
         condition: service_started
     networks:
       webservices:
@@ -22,15 +24,29 @@ services:
         - action: rebuild
           path: ./front/Dockerfile
 
-  search:
+  api-gateway:
+    image: kong:latest
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /etc/kong/kong.yml
+    volumes:
+      - ./kong.yml:/etc/kong/kong.yml
+    ports:
+      - "8000:8000"   # Public HTTP port
+      - "8001:8001"   # Admin API
+    depends_on:
+      - search-service
+      - resource-service
+
+  search-service:
     build:
-      context: ./search
+      context: ./search-service
       target: release
       dockerfile: Dockerfile
-    container_name: search
+    container_name: search-service
     restart: on-failure
     env_file:
-      - search/.env
+      - search-service/.env
     ports:
       - "8081:8081"
     depends_on:
@@ -38,21 +54,95 @@ services:
         condition: service_started
       ollama-generator:
         condition: service_started
-      search_database:
+      search-database:
         condition: service_healthy
     networks:
       webservices:
         aliases:
-          - search
+          - search-service
     develop:
       watch:
         - action: sync
-          path: ./search
+          path: ./search-service
           target: /app
-          ignore:
-            - node_modules/
         - action: rebuild
-          path: ./search/Dockerfile
+          path: ./search-service/Dockerfile
+
+  search-database:
+    image: pgvector/pgvector:pg17
+    container_name: search-database
+    hostname: search-database
+    env_file:
+      - ./.env
+    environment:
+      - POSTGRES_USER=${SEARCH_DB_USER}
+      - POSTGRES_PASSWORD=${SEARCH_DB_PASSWORD}
+      - POSTGRES_DB=${SEARCH_DB_NAME}
+    ports:
+      - ${SEARCH_DB_PORT}:5432
+    volumes:
+      - ./search-database/.data:/var/lib/postgresql/data
+    restart: on-failure
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${SEARCH_DB_USER} -d ${SEARCH_DB_NAME}" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      webservices:
+        aliases:
+          - search-database
+
+  resource-service:
+    build:
+      context: ./resource-service
+      target: release
+      dockerfile: Dockerfile
+    container_name: resource-service
+    restart: on-failure
+    env_file:
+      - resource-service/.env
+    ports:
+      - "8082:8082"
+    depends_on:
+      resource-database:
+        condition: service_healthy
+    networks:
+      webservices:
+        aliases:
+          - resource-service
+    develop:
+      watch:
+        - action: sync
+          path: ./resource-service
+          target: /app
+        - action: rebuild
+          path: ./resource-service/Dockerfile
+
+  resource-database:
+    image: postgres:17
+    container_name: resource-database
+    hostname: resource-database
+    env_file:
+      - ./.env
+    environment:
+      - POSTGRES_USER=${RESOURCE_DB_USER}
+      - POSTGRES_PASSWORD=${RESOURCE_DB_PASSWORD}
+      - POSTGRES_DB=${RESOURCE_DB_NAME}
+    ports:
+      - ${RESOURCE_DB_PORT}:5432
+    volumes:
+      - ./resource-database/.data:/var/lib/postgresql/data
+    restart: on-failure
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${RESOURCE_DB_USER} -d ${RESOURCE_DB_NAME}" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      webservices:
+        aliases:
+          - resource-database
 
   ollama-generator:
     image: ollama/ollama
@@ -128,7 +218,7 @@ services:
     command: start
     restart: on-failure
     depends_on:
-      auth_database:
+      auth-database:
         condition: service_healthy
     ports:
       - '8080:8080'
@@ -137,10 +227,10 @@ services:
         aliases:
           - auth
 
-  auth_database:
+  auth-database:
     image: postgres:17
     volumes:
-      - ./auth_database/.data:/var/lib/postgresql/data
+      - ./auth-database/.data:/var/lib/postgresql/data
     env_file:
       - ./.env
     environment:
@@ -158,33 +248,7 @@ services:
     networks:
       webservices:
         aliases:
-          - auth_database
-
-  search_database:
-    image: pgvector/pgvector:pg17
-    container_name: search_database
-    hostname: search_database
-    env_file:
-      - ./.env
-    environment:
-      - POSTGRES_USER=${SEARCH_DB_USER}
-      - POSTGRES_PASSWORD=${SEARCH_DB_PASSWORD}
-      - POSTGRES_DB=${SEARCH_DB_NAME}
-    ports:
-      - ${SEARCH_DB_PORT}:5432
-    volumes:
-      - ./search_database/.data:/var/lib/postgresql/data
-      - ./search_database/scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
-    restart: on-failure
-    healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${SEARCH_DB_USER} -d ${SEARCH_DB_NAME}" ]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    networks:
-      webservices:
-        aliases:
-          - search_database
+          - auth-database
 
 networks:
   webservices:
