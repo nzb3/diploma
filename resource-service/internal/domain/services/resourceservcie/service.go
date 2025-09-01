@@ -2,13 +2,13 @@ package resourceservcie
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sync"
+	"time"
 
 	"github.com/google/uuid"
 
-	"github.com/nzb3/diploma/resource-service/internal/domain/models/eventmodel"
 	"github.com/nzb3/diploma/resource-service/internal/domain/models/resourcemodel"
 )
 
@@ -19,6 +19,7 @@ type resourceRepository interface {
 	GetResources(ctx context.Context, limit int, offset int) ([]resourcemodel.Resource, error)
 	GetResourcesByOwnerID(ctx context.Context, ownerID uuid.UUID, limit int, offset int) ([]resourcemodel.Resource, error)
 	GetUsersResourceByID(ctx context.Context, resourceID uuid.UUID, ownerID uuid.UUID) (resourcemodel.Resource, error)
+	GetResourceByID(ctx context.Context, resourceID uuid.UUID) (resourcemodel.Resource, error)
 	SaveResource(ctx context.Context, resource resourcemodel.Resource) (resourcemodel.Resource, error)
 	UpdateUsersResource(ctx context.Context, userID uuid.UUID, resource resourcemodel.Resource) (resourcemodel.Resource, error)
 	UpdateResourceStatus(ctx context.Context, resourceID uuid.UUID, status resourcemodel.ResourceStatus) (resourcemodel.Resource, error)
@@ -29,33 +30,34 @@ type contentExtractor interface {
 	ExtractContent(ctx context.Context, data []byte, dataType string) (string, error)
 }
 
-type eventProvider interface {
-	CreateEvent(name string, topic string, payload []byte) error
-	ListenEvents(topic string, conditionFn func(eventmodel.Event) bool) (<-chan eventmodel.Event, error)
+type eventService interface {
+	PublishEvent(ctx context.Context, eventName string, resourceData interface{}) error
 }
 
 type Service struct {
 	resourceRepo     resourceRepository
 	contentExtractor contentExtractor
-	eventProvider    eventProvider
+	eventService     eventService
+	// statusChannels maps resource.ID to resourceStatusUpdate channel
+	statusChannels sync.Map
 }
 
-func NewService(rr resourceRepository, ce contentExtractor, ep eventProvider) *Service {
+func NewService(rr resourceRepository, ce contentExtractor, es eventService) *Service {
 	slog.Debug("Initializing resource service",
 		"repository_type", fmt.Sprintf("%T", rr))
 	return &Service{
 		resourceRepo:     rr,
 		contentExtractor: ce,
-		eventProvider:    ep,
+		eventService:     es,
 	}
 }
 
-func (s *Service) SaveUsersResource(ctx context.Context, userID uuid.UUID, content []byte, resourceType resourcemodel.ResourceType, name, url string) (<-chan resourcemodel.Resource, <-chan resourcemodel.ResourceStatusUpdate, <-chan error) {
+// SaveUsersResource saves a new resource with the given content and type.
+// It also publishes a resource.created event.
+func (s *Service) SaveUsersResource(ctx context.Context, userID uuid.UUID, content []byte, resourceType resourcemodel.ResourceType, name, url string) (resourcemodel.Resource, <-chan resourcemodel.ResourceStatusUpdate, error) {
 	const op = "Service.SaveUsersResource"
 
 	resourceStatusUpdateCh := make(chan resourcemodel.ResourceStatusUpdate)
-	resourceCh := make(chan resourcemodel.Resource)
-	errCh := make(chan error)
 
 	resource := resourcemodel.NewResource(
 		resourcemodel.WithOwnerID(userID),
@@ -66,150 +68,35 @@ func (s *Service) SaveUsersResource(ctx context.Context, userID uuid.UUID, conte
 		resourcemodel.WithStatus(resourcemodel.ResourceStatusProcessing),
 	)
 
-	go s.saveResource(ctx, resource, resourceCh, resourceStatusUpdateCh, errCh)
-
-	return resourceCh, resourceStatusUpdateCh, errCh
-}
-
-func (s *Service) saveResource(
-	ctx context.Context,
-	resource resourcemodel.Resource,
-	resourceCh chan<- resourcemodel.Resource,
-	resourceStatusUpdateCh chan<- resourcemodel.ResourceStatusUpdate,
-	errCh chan<- error,
-) {
-	const op = "Service.saveResource"
-
-	defer func() {
-		close(resourceCh)
-		close(resourceStatusUpdateCh)
-		close(errCh)
-	}()
-
-	sendErr := func(err error) {
-		errCh <- fmt.Errorf("%s: %w", op, err)
-	}
-
 	resource, err := s.extractContent(ctx, resource)
 	if err != nil {
-		sendErr(err)
-		return
+		return resourcemodel.Resource{}, resourceStatusUpdateCh, fmt.Errorf("%s: %w", op, err)
 	}
 
 	resource, err = s.resourceRepo.SaveResource(ctx, resource)
 	if err != nil {
-		sendErr(err)
-		return
+		return resourcemodel.Resource{}, resourceStatusUpdateCh, fmt.Errorf("%s: %w", op, err)
 	}
 
-	resourceStatusUpdateCh <- resourcemodel.ResourceStatusUpdate{
-		ResourceID: resource.ID,
-		Status:     resourcemodel.ResourceStatusProcessing,
-	}
-	resourceCh <- resource
+	// Register the status channel in sync.Map for indexation processor.
+	// Note that this channel will be closed when the resource is deleted.
+	s.statusChannels.Store(resource.ID, resourceStatusUpdateCh)
 
-	if err := s.sendResourceCreatedEvent(ctx, resource); err != nil {
-		sendErr(err)
-		return
-	}
-
-	eventCh, err := s.eventProvider.ListenEvents(ResourceTopicName, func(event eventmodel.Event) bool {
-		var eventResource resourcemodel.Resource
-		if err := json.Unmarshal(event.Payload, &eventResource); err != nil {
-			slog.ErrorContext(ctx, "Failed to unmarshal event payload",
-				"op", op,
-				"error", err,
-			)
-			return false
-		}
-		return (event.Name == "resource_indexed" || event.Name == "resource_indexation_failed") && eventResource.ID == resource.ID
+	err = s.eventService.PublishEvent(ctx, "resource.created", map[string]interface{}{
+		"resource_id": resource.ID,
+		"owner_id":    resource.OwnerID,
+		"name":        resource.Name,
+		"type":        resource.Type,
+		"status":      resource.Status,
+		"created_at":  resource.CreatedAt,
 	})
 	if err != nil {
-		sendErr(err)
-		return
+		slog.ErrorContext(ctx, "Failed to publish resource created event", "error", err)
+		return resourcemodel.Resource{}, resourceStatusUpdateCh, err
 	}
 
-	select {
-	case <-ctx.Done():
-		slog.InfoContext(ctx, "Context cancelled, stopping resource processing",
-			"op", op,
-			"resource_id", resource.ID,
-		)
-		sendErr(fmt.Errorf("context cancelled"))
-	case event := <-eventCh:
-		s.handleResourceEvent(ctx, event, resource, resourceStatusUpdateCh, errCh)
-	}
+	return resource, resourceStatusUpdateCh, nil
 }
-
-func (s *Service) handleResourceEvent(
-	ctx context.Context,
-	event eventmodel.Event,
-	resource resourcemodel.Resource,
-	resourceStatusUpdateCh chan<- resourcemodel.ResourceStatusUpdate,
-	errCh chan<- error,
-) {
-	const op = "Service.handleResourceEvent"
-	var err error
-
-	switch event.Name {
-	case "resource_indexed":
-		resource, err = s.UpdateResourceStatus(ctx, resource, resourcemodel.ResourceStatusCompleted)
-		if err != nil {
-			errCh <- fmt.Errorf("%s: %w", op, err)
-			return
-		}
-		resourceStatusUpdateCh <- resourcemodel.ResourceStatusUpdate{
-			ResourceID: resource.ID,
-			Status:     resourcemodel.ResourceStatusCompleted,
-		}
-	case "resource_indexation_failed":
-		resource, err = s.UpdateResourceStatus(ctx, resource, resourcemodel.ResourceStatusFailed)
-		if err != nil {
-			errCh <- fmt.Errorf("%s: %w", op, err)
-			return
-		}
-		resourceStatusUpdateCh <- resourcemodel.ResourceStatusUpdate{
-			ResourceID: resource.ID,
-			Status:     resourcemodel.ResourceStatusFailed,
-		}
-	}
-}
-
-type ResourceCreatedEvent struct {
-	ID      uuid.UUID `json:"resource_id"`
-	Content string    `json:"resource_content"`
-}
-
-func (s *Service) sendResourceCreatedEvent(ctx context.Context, resource resourcemodel.Resource) error {
-	const op = "Service.sendResourceCreatedEvent"
-	const resourceCreatedEventName = "resource_created"
-
-	data := &ResourceCreatedEvent{
-		ID:      resource.ID,
-		Content: resource.ExtractedContent,
-	}
-
-	event, err := eventmodel.NewEvent(resourceCreatedEventName, ResourceTopicName, data)
-	if err != nil {
-		slog.ErrorContext(ctx, "Failed to create resource created event",
-			"op", op,
-			"error", err)
-		return fmt.Errorf("%s: %w", op, err)
-	}
-
-	return s.eventProvider.CreateEvent(event.Name, event.Topic, event.Payload)
-}
-
-//resource_created event {
-//    resource_id uuid.UUID,
-//    resource_content string
-//}
-//resource_indexed event {
-//    resource_id
-//}
-//resource_indexation_failed event {
-//    resource_id
-// }
 
 func (s *Service) GetUsersResources(ctx context.Context, userID uuid.UUID, limit, offset int) ([]resourcemodel.Resource, error) {
 	const op = "Service.GetUsersResources"
@@ -260,15 +147,43 @@ func (s *Service) UpdateUsersResource(ctx context.Context, userID uuid.UUID, res
 		return resourcemodel.Resource{}, fmt.Errorf("%s: %w", op, err)
 	}
 
+	err = s.eventService.PublishEvent(ctx, "resource.updated", map[string]interface{}{
+		"resource_id": resource.ID,
+		"owner_id":    resource.OwnerID,
+		"name":        resource.Name,
+		"type":        resource.Type,
+		"status":      resource.Status,
+		"updated_at":  resource.UpdatedAt,
+	})
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to publish resource updated event", "error", err)
+	}
+
 	return resource, nil
 }
 
 func (s *Service) DeleteUsersResource(ctx context.Context, userID uuid.UUID, resourceID uuid.UUID) error {
 	const op = "Service.DeleteUsersResource"
 
-	err := s.resourceRepo.DeleteUsersResource(ctx, userID, resourceID)
+	resource, err := s.GetUsersResourceByID(ctx, userID, resourceID)
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	err = s.resourceRepo.DeleteUsersResource(ctx, userID, resourceID)
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	err = s.eventService.PublishEvent(ctx, "resource.deleted", map[string]interface{}{
+		"resource_id": resourceID,
+		"owner_id":    userID,
+		"name":        resource.Name,
+		"type":        resource.Type,
+		"deleted_at":  time.Now(),
+	})
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to publish resource deleted event", "error", err)
 	}
 
 	return nil
@@ -311,6 +226,50 @@ func (s *Service) UpdateResourceStatus(
 		slog.ErrorContext(ctx, "Failed to update resource",
 			"error", err,
 		)
+		return resourcemodel.Resource{}, fmt.Errorf("%s: %w", op, err)
+	}
+
+	err = s.eventService.PublishEvent(ctx, "resource.status_updated", map[string]interface{}{
+		"resource_id": resource.ID,
+		"owner_id":    resource.OwnerID,
+		"old_status":  resource.Status,
+		"new_status":  status,
+		"updated_at":  time.Now(),
+	})
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to publish resource status updated event", "error", err)
+	}
+
+	return resource, nil
+}
+
+// GetResourceStatusChannel retrieves a status channel for a resource ID
+func (s *Service) GetResourceStatusChannel(resourceID uuid.UUID) (chan resourcemodel.ResourceStatusUpdate, bool) {
+	value, exists := s.statusChannels.Load(resourceID)
+	if !exists {
+		return nil, false
+	}
+
+	ch, ok := value.(chan resourcemodel.ResourceStatusUpdate)
+	if !ok {
+		s.statusChannels.Delete(resourceID)
+		return nil, false
+	}
+
+	return ch, true
+}
+
+// RemoveResourceStatusChannel removes a status channel from the map
+func (s *Service) RemoveResourceStatusChannel(resourceID uuid.UUID) {
+	s.statusChannels.Delete(resourceID)
+}
+
+// GetResourceByID retrieves a resource by ID (needed for indexation processor)
+func (s *Service) GetResourceByID(ctx context.Context, resourceID uuid.UUID) (resourcemodel.Resource, error) {
+	const op = "Service.GetResourceByID"
+
+	resource, err := s.resourceRepo.GetResourceByID(ctx, resourceID)
+	if err != nil {
 		return resourcemodel.Resource{}, fmt.Errorf("%s: %w", op, err)
 	}
 
