@@ -1,6 +1,6 @@
 module github.com/nzb3/diploma/search-service
 
-go 1.24.0
+go 1.25.0
 
 require (
 	github.com/JohannesKaufmann/html-to-markdown/v2 v2.3.1
