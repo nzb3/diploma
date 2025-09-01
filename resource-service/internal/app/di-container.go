@@ -249,6 +249,30 @@ func (sp *ServiceProvider) Repository(ctx context.Context) *pgx.Repository {
 	return repository
 }
 
+// ResourcesRepository returns the resources repository instance, creating it if it doesn't exist
+func (sp *ServiceProvider) ResourcesRepository(ctx context.Context) *resources.Repository {
+	if sp.resourcesRepository != nil {
+		return sp.resourcesRepository
+	}
+
+	resourcesRepository := resources.NewResourceRepository(ctx, sp.Repository(ctx))
+
+	sp.resourcesRepository = resourcesRepository
+	return resourcesRepository
+}
+
+// EventsRepository returns the events repository instance, creating it if it doesn't exist
+func (sp *ServiceProvider) EventsRepository(ctx context.Context) *events.Repository {
+	if sp.eventsRepository != nil {
+		return sp.eventsRepository
+	}
+
+	eventsRepository := events.NewEventRepository(ctx, sp.Repository(ctx))
+
+	sp.eventsRepository = eventsRepository
+	return eventsRepository
+}
+
 // ResourceProcessor returns the resource processor instance, creating it if it doesn't exist
 func (sp *ServiceProvider) ResourceProcessor(ctx context.Context) *contentextractor.ContentExtractor {
 	if sp.contentExtractor != nil {
