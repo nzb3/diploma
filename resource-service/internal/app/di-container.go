@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/gin-contrib/cors"
@@ -19,7 +20,12 @@ import (
 	"github.com/nzb3/diploma/resource-service/internal/controllers/middleware"
 	"github.com/nzb3/diploma/resource-service/internal/controllers/resourcecontroller"
 	"github.com/nzb3/diploma/resource-service/internal/domain/services/contentextractor"
+	"github.com/nzb3/diploma/resource-service/internal/domain/services/eventservice"
+	"github.com/nzb3/diploma/resource-service/internal/domain/services/indexationprocessor"
+	"github.com/nzb3/diploma/resource-service/internal/domain/services/outboxprocessor"
 	"github.com/nzb3/diploma/resource-service/internal/domain/services/resourceservcie"
+	"github.com/nzb3/diploma/resource-service/internal/repository/messaging"
+	"github.com/nzb3/diploma/resource-service/internal/repository/messaging/kafka"
 	"github.com/nzb3/diploma/resource-service/internal/repository/pgx"
 	"github.com/nzb3/diploma/resource-service/internal/repository/pgx/events"
 	"github.com/nzb3/diploma/resource-service/internal/repository/pgx/resources"
@@ -45,6 +51,12 @@ type ServiceProvider struct {
 	contentExtractor    *contentextractor.ContentExtractor
 	authConfig          *middleware.AuthMiddlewareConfig
 	authMiddleware      *middleware.AuthMiddleware
+	// Kafka components
+	kafkaProducer       messaging.MessageProducer
+	kafkaConsumer       messaging.MessageConsumer
+	eventService        *eventservice.Service
+	outboxProcessor     *outboxprocessor.Processor
+	indexationProcessor *indexationprocessor.Processor
 }
 
 // NewServiceProvider creates and returns a new instance of ServiceProvider
@@ -295,6 +307,7 @@ func (sp *ServiceProvider) ResourceService(ctx context.Context) *resourceservcie
 	service := resourceservcie.NewService(
 		sp.ResourcesRepository(ctx),
 		sp.ResourceProcessor(ctx),
+		sp.EventService(ctx),
 	)
 
 	sp.resourceService = service
@@ -313,6 +326,106 @@ func (sp *ServiceProvider) ResourceController(ctx context.Context) *resourcecont
 	sp.resourceController = controller
 
 	return controller
+}
+
+// KafkaProducer returns the Kafka producer instance, creating it if it doesn't exist
+func (sp *ServiceProvider) KafkaProducer(ctx context.Context) messaging.MessageProducer {
+	if sp.kafkaProducer != nil {
+		return sp.kafkaProducer
+	}
+
+	// Get Kafka brokers from environment variable
+	brokersEnv := os.Getenv("KAFKA_BROKERS")
+	if brokersEnv == "" {
+		brokersEnv = "kafka:29092" // Default value
+	}
+	brokers := strings.Split(brokersEnv, ",")
+
+	// Create Kafka producer with default configuration
+	config := kafka.NewDefaultConfig(brokers)
+	producer, err := kafka.NewKafkaProducer(config)
+	if err != nil {
+		sp.Logger(ctx).Logger().Error("error creating kafka producer", "error", err.Error())
+		panic(fmt.Errorf("error creating kafka producer: %w", err))
+	}
+
+	sp.kafkaProducer = producer
+	return producer
+}
+
+// EventService returns the event service instance, creating it if it doesn't exist
+func (sp *ServiceProvider) EventService(ctx context.Context) *eventservice.Service {
+	if sp.eventService != nil {
+		return sp.eventService
+	}
+
+	service := eventservice.NewEventService(
+		sp.EventsRepository(ctx),
+		sp.KafkaProducer(ctx),
+	)
+
+	sp.eventService = service
+	return service
+}
+
+// OutboxProcessor returns the outbox processor instance, creating it if it doesn't exist
+func (sp *ServiceProvider) OutboxProcessor(ctx context.Context) *outboxprocessor.Processor {
+	if sp.outboxProcessor != nil {
+		return sp.outboxProcessor
+	}
+
+	processor := outboxprocessor.NewDefaultOutboxProcessor(
+		sp.EventService(ctx),
+	)
+
+	sp.outboxProcessor = processor
+	return processor
+}
+
+// KafkaConsumer returns the Kafka consumer instance, creating it if it doesn't exist
+func (sp *ServiceProvider) KafkaConsumer(ctx context.Context) messaging.MessageConsumer {
+	if sp.kafkaConsumer != nil {
+		return sp.kafkaConsumer
+	}
+
+	// Get Kafka brokers from environment variable
+	brokersEnv := os.Getenv("KAFKA_BROKERS")
+	if brokersEnv == "" {
+		brokersEnv = "kafka:29092" // Default value
+	}
+	brokers := strings.Split(brokersEnv, ",")
+
+	// Get consumer group ID from environment variable
+	groupID := os.Getenv("KAFKA_CONSUMER_GROUP_ID")
+	if groupID == "" {
+		groupID = "resource-service-indexation-consumer" // Default value
+	}
+
+	// Create Kafka consumer with default configuration
+	config := kafka.NewDefaultConsumerConfig(brokers, groupID)
+	consumer, err := kafka.NewKafkaConsumer(config)
+	if err != nil {
+		sp.Logger(ctx).Logger().Error("error creating kafka consumer", "error", err.Error())
+		panic(fmt.Errorf("error creating kafka consumer: %w", err))
+	}
+
+	sp.kafkaConsumer = consumer
+	return consumer
+}
+
+// IndexationProcessor returns the indexation processor instance, creating it if it doesn't exist
+func (sp *ServiceProvider) IndexationProcessor(ctx context.Context) *indexationprocessor.Processor {
+	if sp.indexationProcessor != nil {
+		return sp.indexationProcessor
+	}
+
+	processor := indexationprocessor.NewIndexationProcessor(
+		sp.ResourceService(ctx),
+		sp.KafkaConsumer(ctx),
+	)
+
+	sp.indexationProcessor = processor
+	return processor
 }
 
 // ServerConfig returns the server configuration, creating it if it doesn't exist

@@ -38,12 +38,28 @@ func (a *App) Start(ctx context.Context) error {
 
 	eg, ctx := errgroup.WithContext(ctx)
 
+	// Start the HTTP server
 	eg.Go(func() error {
 		slog.Info("Starting server")
 		a.server.BaseContext = func(_ net.Listener) context.Context {
 			return ctx
 		}
 		return a.server.ListenAndServe()
+	})
+
+	// Start the outbox processor for reliable event delivery
+	eg.Go(func() error {
+		slog.Info("Starting outbox processor")
+		processor := a.serviceProvider.OutboxProcessor(ctx)
+		processor.Start(ctx)
+		return nil
+	})
+
+	// Start the indexation processor for handling indexation completion events
+	eg.Go(func() error {
+		slog.Info("Starting indexation processor")
+		processor := a.serviceProvider.IndexationProcessor(ctx)
+		return processor.Start(ctx)
 	})
 
 	return fmt.Errorf("%s: %w", op, eg.Wait())
