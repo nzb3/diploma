@@ -163,6 +163,17 @@ func (r *Repository) DeleteUsersResource(ctx context.Context, id uuid.UUID, owne
 	return nil
 }
 
+// GetResourceByID retrieves a resource by ID without owner check
+func (r *Repository) GetResourceByID(ctx context.Context, resourceID uuid.UUID) (resourcemodel.Resource, error) {
+	sqlcResource, err := r.Queries().GetResourceByID(ctx, pgx.UuidToPgType(resourceID))
+	if err != nil {
+		return resourcemodel.Resource{}, fmt.Errorf("failed to get resource by ID: %w", err)
+	}
+
+	resource := sqlcResourceToModel(sqlcResource)
+	return resource, nil
+}
+
 func modelTypeToSqlc(resourceType resourcemodel.ResourceType) sqlc.ResourceType {
 	switch resourceType {
 	case resourcemodel.ResourceTypePDF:

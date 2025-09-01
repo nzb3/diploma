@@ -18,6 +18,7 @@ type Querier interface {
 	CreateResource(ctx context.Context, arg CreateResourceParams) (Resources, error)
 	DeleteUsersResource(ctx context.Context, arg DeleteUsersResourceParams) error
 	GetNotSentEvents(ctx context.Context, arg GetNotSentEventsParams) ([]Events, error)
+	GetResourceByID(ctx context.Context, id pgtype.UUID) (Resources, error)
 	GetResources(ctx context.Context, arg GetResourcesParams) ([]Resources, error)
 	GetResourcesByOwnerID(ctx context.Context, arg GetResourcesByOwnerIDParams) ([]Resources, error)
 	GetResourcesByStatus(ctx context.Context, status ResourceStatus) ([]Resources, error)
@@ -25,6 +26,7 @@ type Querier interface {
 	GetResourcesCount(ctx context.Context, arg GetResourcesCountParams) (int64, error)
 	GetResourcesWithFilter(ctx context.Context, arg GetResourcesWithFilterParams) ([]Resources, error)
 	GetUsersResourceByID(ctx context.Context, arg GetUsersResourceByIDParams) (Resources, error)
+	MarkEventAsSent(ctx context.Context, id pgtype.UUID) error
 	UpdateResourceStatus(ctx context.Context, arg UpdateResourceStatusParams) (Resources, error)
 	UpdateUsersResource(ctx context.Context, arg UpdateUsersResourceParams) (Resources, error)
 }

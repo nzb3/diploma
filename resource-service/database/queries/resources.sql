@@ -18,6 +18,11 @@ SELECT id, name, type, url, extracted_content, raw_content, status, owner_id, cr
 FROM resources
 WHERE id = $1 AND owner_id = $2;
 
+-- name: GetResourceByID :one
+SELECT id, name, type, url, extracted_content, raw_content, status, owner_id, created_at, updated_at
+FROM resources
+WHERE id = $1;
+
 -- name: CreateResource :one
 INSERT INTO resources (
     name, type, url, extracted_content, raw_content, owner_id

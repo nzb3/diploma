@@ -3,6 +3,7 @@ package events
 import (
 	"context"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/samber/lo"
 
@@ -57,6 +58,11 @@ func (r *Repository) CreateEvent(ctx context.Context, event eventmodel.Event) (e
 	}
 
 	return sqlcEventToModel(sqlcEvent), nil
+}
+
+// MarkEventAsSent marks an event as sent in the database
+func (r *Repository) MarkEventAsSent(ctx context.Context, eventID uuid.UUID) error {
+	return r.Queries().MarkEventAsSent(ctx, pgx.UuidToPgType(eventID))
 }
 
 func sqlcEventToModel(sqlcEvent sqlc.Events) eventmodel.Event {

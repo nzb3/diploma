@@ -112,6 +112,30 @@ func (q *Queries) DeleteUsersResource(ctx context.Context, arg DeleteUsersResour
 	return err
 }
 
+const getResourceByID = `-- name: GetResourceByID :one
+SELECT id, name, type, url, extracted_content, raw_content, status, owner_id, created_at, updated_at
+FROM resources
+WHERE id = $1
+`
+
+func (q *Queries) GetResourceByID(ctx context.Context, id pgtype.UUID) (Resources, error) {
+	row := q.db.QueryRow(ctx, getResourceByID, id)
+	var i Resources
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Type,
+		&i.Url,
+		&i.ExtractedContent,
+		&i.RawContent,
+		&i.Status,
+		&i.OwnerID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getResources = `-- name: GetResources :many
 SELECT id, name, type, url, extracted_content, raw_content, status, owner_id, created_at, updated_at
 FROM resources

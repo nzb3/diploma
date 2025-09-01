@@ -9,3 +9,8 @@ FROM events
 WHERE sent=false
 ORDER BY event_time ASC
 LIMIT $1 OFFSET $2;
+
+-- name: MarkEventAsSent :exec
+UPDATE events 
+SET sent = true 
+WHERE id = $1;

@@ -7,6 +7,8 @@ package sqlc
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createEvent = `-- name: CreateEvent :one
@@ -73,4 +75,15 @@ func (q *Queries) GetNotSentEvents(ctx context.Context, arg GetNotSentEventsPara
 		return nil, err
 	}
 	return items, nil
+}
+
+const markEventAsSent = `-- name: MarkEventAsSent :exec
+UPDATE events 
+SET sent = true 
+WHERE id = $1
+`
+
+func (q *Queries) MarkEventAsSent(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, markEventAsSent, id)
+	return err
 }
