@@ -21,7 +21,7 @@ const (
 )
 
 type resourceService interface {
-	SaveUsersResource(ctx context.Context, userID uuid.UUID, content []byte, resourceType resourcemodel.ResourceType, name, url string) (<-chan resourcemodel.Resource, <-chan resourcemodel.ResourceStatusUpdate, <-chan error)
+	SaveUsersResource(ctx context.Context, userID uuid.UUID, content []byte, resourceType resourcemodel.ResourceType, name, url string) (resourcemodel.Resource, <-chan resourcemodel.ResourceStatusUpdate, error)
 	GetUsersResources(ctx context.Context, userID uuid.UUID, limit, offset int) ([]resourcemodel.Resource, error)
 	GetUsersResourceByID(ctx context.Context, userID uuid.UUID, resourceID uuid.UUID) (resourcemodel.Resource, error)
 	DeleteUsersResource(ctx context.Context, userID uuid.UUID, resourceID uuid.UUID) error
@@ -83,16 +83,23 @@ func (c *Controller) SaveResource() gin.HandlerFunc {
 			return
 		}
 
-		resourceCh, statusUpdateCh, errCh := c.service.SaveUsersResource(ctx, userID, req.Content, resourcemodel.ResourceType(req.Type), req.Name, req.URL)
+		resource, statusUpdateCh, err := c.service.SaveUsersResource(ctx, userID, req.Content, resourcemodel.ResourceType(req.Type), req.Name, req.URL)
+		if err != nil {
+			slog.Error("Failed to save resource", "error", err)
+			c.respondWithError(ctx, http.StatusInternalServerError, err.Error())
+			return
+		}
 
+		// Send initial resource creation event
+		if !c.handleResourceEvent(ctx, resource, true) {
+			return
+		}
+
+		// Stream status updates
 		ctx.Stream(func(w io.Writer) bool {
 			select {
-			case resource, ok := <-resourceCh:
-				return c.handleResourceEvent(ctx, resource, ok)
 			case statusUpdate, ok := <-statusUpdateCh:
 				return c.handleStatusUpdateEvent(ctx, statusUpdate, ok)
-			case err := <-errCh:
-				return c.handleErrorEvent(ctx, err, ok)
 			case <-ctx.Done():
 				slog.Warn("Client disconnected", "client", ctx.ClientIP())
 				return false
