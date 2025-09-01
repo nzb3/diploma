@@ -292,7 +292,10 @@ func (sp *ServiceProvider) ResourceService(ctx context.Context) *resourceservcie
 		return sp.resourceService
 	}
 
-	service := resourceservcie.NewService(sp.Repository(ctx), sp.ResourceProcessor(ctx))
+	service := resourceservcie.NewService(
+		sp.ResourcesRepository(ctx),
+		sp.ResourceProcessor(ctx),
+	)
 
 	sp.resourceService = service
 
