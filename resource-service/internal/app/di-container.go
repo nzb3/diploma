@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nzb3/slogmanager"
 	"github.com/tmc/langchaingo/llms/ollama"
 	"gorm.io/gorm"
@@ -20,25 +21,30 @@ import (
 	"github.com/nzb3/diploma/resource-service/internal/domain/services/contentextractor"
 	"github.com/nzb3/diploma/resource-service/internal/domain/services/resourceservcie"
 	"github.com/nzb3/diploma/resource-service/internal/repository/pgx"
+	"github.com/nzb3/diploma/resource-service/internal/repository/pgx/events"
+	"github.com/nzb3/diploma/resource-service/internal/repository/pgx/resources"
 	"github.com/nzb3/diploma/resource-service/internal/server"
 )
 
 // ServiceProvider implementation of DI-container haves method to initialize components of application
 type ServiceProvider struct {
-	slogManager        *slogmanager.Manager
-	embeddingLLM       *ollama.LLM
-	generationLLM      *ollama.LLM
-	server             *http.Server
-	resourceController *resourcecontroller.Controller
-	ginEngine          *gin.Engine
-	resourceService    *resourceservcie.Service
-	serverConfig       *server.Config
-	repositoryConfig   *pgx.Config
-	repository         *pgx.Repository
-	gormDB             *gorm.DB
-	contentExtractor   *contentextractor.ContentExtractor
-	authConfig         *middleware.AuthMiddlewareConfig
-	authMiddleware     *middleware.AuthMiddleware
+	slogManager         *slogmanager.Manager
+	embeddingLLM        *ollama.LLM
+	generationLLM       *ollama.LLM
+	server              *http.Server
+	resourceController  *resourcecontroller.Controller
+	ginEngine           *gin.Engine
+	resourceService     *resourceservcie.Service
+	serverConfig        *server.Config
+	repositoryConfig    *pgx.Config
+	pgxPool             *pgxpool.Pool
+	repository          *pgx.Repository
+	resourcesRepository *resources.Repository
+	eventsRepository    *events.Repository
+	gormDB              *gorm.DB
+	contentExtractor    *contentextractor.ContentExtractor
+	authConfig          *middleware.AuthMiddlewareConfig
+	authMiddleware      *middleware.AuthMiddleware
 }
 
 // NewServiceProvider creates and returns a new instance of ServiceProvider
@@ -210,13 +216,29 @@ func (sp *ServiceProvider) RepositoryConfig(ctx context.Context) *pgx.Config {
 	return config
 }
 
-// Repository returns the GORM repository instance, creating it if it doesn't exist
+// PgxPool returns the pgx connection pool, creating it if it doesn't exist
+func (sp *ServiceProvider) PgxPool(ctx context.Context) *pgxpool.Pool {
+	if sp.pgxPool != nil {
+		return sp.pgxPool
+	}
+
+	pool, err := pgx.NewPgxPool(ctx, sp.RepositoryConfig(ctx))
+	if err != nil {
+		sp.Logger(ctx).Logger().Error("error creating pgx pool", "error", err.Error())
+		panic(fmt.Errorf("error creating pgx pool: %w", err))
+	}
+
+	sp.pgxPool = pool
+	return pool
+}
+
+// Repository returns the pgx repository instance, creating it if it doesn't exist
 func (sp *ServiceProvider) Repository(ctx context.Context) *pgx.Repository {
 	if sp.repository != nil {
 		return sp.repository
 	}
 
-	repository, err := pgx.NewRepository(ctx, sp.RepositoryConfig(ctx))
+	repository, err := pgx.NewRepository(ctx, sp.PgxPool(ctx))
 	if err != nil {
 		sp.Logger(ctx).Logger().Error("error creating repository", "error", err.Error())
 		panic(fmt.Errorf("error creating repository: %w", err))
@@ -225,6 +247,30 @@ func (sp *ServiceProvider) Repository(ctx context.Context) *pgx.Repository {
 	sp.repository = repository
 
 	return repository
+}
+
+// ResourcesRepository returns the resources repository instance, creating it if it doesn't exist
+func (sp *ServiceProvider) ResourcesRepository(ctx context.Context) *resources.Repository {
+	if sp.resourcesRepository != nil {
+		return sp.resourcesRepository
+	}
+
+	resourcesRepository := resources.NewResourceRepository(ctx, sp.Repository(ctx))
+
+	sp.resourcesRepository = resourcesRepository
+	return resourcesRepository
+}
+
+// EventsRepository returns the events repository instance, creating it if it doesn't exist
+func (sp *ServiceProvider) EventsRepository(ctx context.Context) *events.Repository {
+	if sp.eventsRepository != nil {
+		return sp.eventsRepository
+	}
+
+	eventsRepository := events.NewEventRepository(ctx, sp.Repository(ctx))
+
+	sp.eventsRepository = eventsRepository
+	return eventsRepository
 }
 
 // ResourceProcessor returns the resource processor instance, creating it if it doesn't exist
@@ -246,7 +292,10 @@ func (sp *ServiceProvider) ResourceService(ctx context.Context) *resourceservcie
 		return sp.resourceService
 	}
 
-	service := resourceservcie.NewService(sp.Repository(ctx), sp.ResourceProcessor(ctx))
+	service := resourceservcie.NewService(
+		sp.ResourcesRepository(ctx),
+		sp.ResourceProcessor(ctx),
+	)
 
 	sp.resourceService = service
 
