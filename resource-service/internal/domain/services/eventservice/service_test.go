@@ -115,7 +115,7 @@ func (suite *EventServiceTestSuite) TestPublishEvent_Success_ImmediatePublishAnd
 	suite.mockRepo.On("MarkEventAsSent", suite.ctx, savedEvent.ID).Return(nil)
 
 	// Execute
-	err := suite.service.PublishEvent(suite.ctx, eventName, suite.testData)
+	err := suite.service.PublishEvent(suite.ctx, "resources", eventName, suite.testData)
 
 	// Assert
 	assert.NoError(suite.T(), err)
@@ -133,7 +133,7 @@ func (suite *EventServiceTestSuite) TestPublishEvent_CreateEventFails() {
 	})).Return(eventmodel.Event{}, expectedError)
 
 	// Execute
-	err := suite.service.PublishEvent(suite.ctx, eventName, suite.testData)
+	err := suite.service.PublishEvent(suite.ctx, "resources", eventName, suite.testData)
 
 	// Assert
 	assert.Error(suite.T(), err)
@@ -156,7 +156,7 @@ func (suite *EventServiceTestSuite) TestPublishEvent_PublishFails_OutboxPattern(
 	suite.mockProducer.On("PublishEvent", suite.ctx, savedEvent).Return(publishError)
 
 	// Execute - should not fail even if publish fails (outbox pattern)
-	err := suite.service.PublishEvent(suite.ctx, eventName, suite.testData)
+	err := suite.service.PublishEvent(suite.ctx, "resources", eventName, suite.testData)
 
 	// Assert
 	assert.NoError(suite.T(), err) // Should not fail due to outbox pattern
@@ -179,7 +179,7 @@ func (suite *EventServiceTestSuite) TestPublishEvent_MarkAsSentFails() {
 	suite.mockRepo.On("MarkEventAsSent", suite.ctx, savedEvent.ID).Return(markSentError)
 
 	// Execute - should not fail even if marking as sent fails
-	err := suite.service.PublishEvent(suite.ctx, eventName, suite.testData)
+	err := suite.service.PublishEvent(suite.ctx, "resources", eventName, suite.testData)
 
 	// Assert
 	assert.NoError(suite.T(), err) // Should not fail as event was published successfully
@@ -194,7 +194,7 @@ func (suite *EventServiceTestSuite) TestPublishEvent_InvalidEventData() {
 	invalidData := make(chan int)
 
 	// Execute
-	err := suite.service.PublishEvent(suite.ctx, eventName, invalidData)
+	err := suite.service.PublishEvent(suite.ctx, "resources", eventName, invalidData)
 
 	// Assert
 	assert.Error(suite.T(), err)
@@ -366,7 +366,7 @@ func (suite *EventServiceTestSuite) TestPublishEvent_DifferentEventTypes() {
 			suite.mockRepo.On("MarkEventAsSent", suite.ctx, savedEvent.ID).Return(nil)
 
 			// Execute
-			err := suite.service.PublishEvent(suite.ctx, tc.eventName, tc.data)
+			err := suite.service.PublishEvent(suite.ctx, "resources", tc.eventName, tc.data)
 
 			// Assert
 			assert.NoError(suite.T(), err)
@@ -389,7 +389,7 @@ func (suite *EventServiceTestSuite) TestPublishEvent_ContextCancelled() {
 	})).Return(eventmodel.Event{}, context.Canceled)
 
 	// Execute
-	err := suite.service.PublishEvent(ctx, eventName, suite.testData)
+	err := suite.service.PublishEvent(ctx, "resources", eventName, suite.testData)
 
 	// Assert
 	assert.Error(suite.T(), err)
@@ -421,7 +421,7 @@ func (suite *EventServiceTestSuite) TestPublishEvent_Concurrency() {
 	errChan := make(chan error, numGoroutines)
 	for i := 0; i < numGoroutines; i++ {
 		go func() {
-			err := suite.service.PublishEvent(suite.ctx, eventName, suite.testData)
+			err := suite.service.PublishEvent(suite.ctx, "resources", eventName, suite.testData)
 			errChan <- err
 		}()
 	}
@@ -467,7 +467,7 @@ func TestService_PublishEvent_EmptyEventName(t *testing.T) {
 	mockProducer.On("PublishEvent", mock.Anything, savedEvent).Return(nil)
 	mockRepo.On("MarkEventAsSent", mock.Anything, savedEvent.ID).Return(nil)
 
-	err := service.PublishEvent(context.Background(), "", data)
+	err := service.PublishEvent(context.Background(), "resources", "", data)
 	assert.NoError(t, err)
 }
 

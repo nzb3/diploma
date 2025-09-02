@@ -42,10 +42,10 @@ func NewEventService(repo eventRepository, producer messageProducer) *Service {
 // PublishEvent publishes a resource-related event using the outbox pattern
 // This method ensures ACID properties by storing the event in the same transaction
 // as the business operation and then attempting immediate delivery
-func (s *Service) PublishEvent(ctx context.Context, eventName string, data interface{}) error {
+func (s *Service) PublishEvent(ctx context.Context, topic string, eventName string, data interface{}) error {
 	const op = "EventService.PublishEvent"
 
-	event, err := eventmodel.NewEvent(eventName, "resources", data)
+	event, err := eventmodel.NewEvent(eventName, topic, data)
 	if err != nil {
 		return fmt.Errorf("%s: failed to create event: %w", op, err)
 	}

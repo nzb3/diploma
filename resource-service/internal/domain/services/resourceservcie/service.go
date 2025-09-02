@@ -31,7 +31,7 @@ type contentExtractor interface {
 }
 
 type eventService interface {
-	PublishEvent(ctx context.Context, eventName string, resourceData interface{}) error
+	PublishEvent(ctx context.Context, topic string, eventName string, resourceData interface{}) error
 }
 
 type Service struct {
@@ -82,7 +82,7 @@ func (s *Service) SaveUsersResource(ctx context.Context, userID uuid.UUID, conte
 	// Note that this channel will be closed when the resource is deleted.
 	s.statusChannels.Store(resource.ID, resourceStatusUpdateCh)
 
-	err = s.eventService.PublishEvent(ctx, "resource.created", map[string]interface{}{
+	err = s.eventService.PublishEvent(ctx, ResourceTopicName, "resource.created", map[string]interface{}{
 		"resource_id": resource.ID,
 		"owner_id":    resource.OwnerID,
 		"name":        resource.Name,
@@ -147,7 +147,7 @@ func (s *Service) UpdateUsersResource(ctx context.Context, userID uuid.UUID, res
 		return resourcemodel.Resource{}, fmt.Errorf("%s: %w", op, err)
 	}
 
-	err = s.eventService.PublishEvent(ctx, "resource.updated", map[string]interface{}{
+	err = s.eventService.PublishEvent(ctx, ResourceTopicName, "resource.updated", map[string]interface{}{
 		"resource_id": resource.ID,
 		"owner_id":    resource.OwnerID,
 		"name":        resource.Name,
@@ -175,7 +175,7 @@ func (s *Service) DeleteUsersResource(ctx context.Context, userID uuid.UUID, res
 		return fmt.Errorf("%s: %w", op, err)
 	}
 
-	err = s.eventService.PublishEvent(ctx, "resource.deleted", map[string]interface{}{
+	err = s.eventService.PublishEvent(ctx, ResourceTopicName, "resource.deleted", map[string]interface{}{
 		"resource_id": resourceID,
 		"owner_id":    userID,
 		"name":        resource.Name,
@@ -229,7 +229,7 @@ func (s *Service) UpdateResourceStatus(
 		return resourcemodel.Resource{}, fmt.Errorf("%s: %w", op, err)
 	}
 
-	err = s.eventService.PublishEvent(ctx, "resource.status_updated", map[string]interface{}{
+	err = s.eventService.PublishEvent(ctx, ResourceTopicName, "resource.status_updated", map[string]interface{}{
 		"resource_id": resource.ID,
 		"owner_id":    resource.OwnerID,
 		"old_status":  resource.Status,

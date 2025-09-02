@@ -86,8 +86,8 @@ type mockEventService struct {
 	mock.Mock
 }
 
-func (m *mockEventService) PublishEvent(ctx context.Context, eventName string, resourceData interface{}) error {
-	args := m.Called(ctx, eventName, resourceData)
+func (m *mockEventService) PublishEvent(ctx context.Context, topic string, eventName string, resourceData interface{}) error {
+	args := m.Called(ctx, topic, eventName, resourceData)
 	return args.Error(0)
 }
 
@@ -165,7 +165,7 @@ func TestService_SaveUsersResource_Success(t *testing.T) {
 		"status":      savedResource.Status,
 		"created_at":  savedResource.CreatedAt,
 	}
-	mockEvent.On("PublishEvent", ctx, "resource.created", expectedEventData).Return(nil)
+	mockEvent.On("PublishEvent", ctx, "resources", "resource.created", expectedEventData).Return(nil)
 
 	// Act
 	result, statusCh, err := service.SaveUsersResource(ctx, userID, content, resourceType, name, url)
@@ -383,7 +383,7 @@ func TestService_UpdateUsersResource_Success(t *testing.T) {
 		"status":      updatedResource.Status,
 		"updated_at":  updatedResource.UpdatedAt,
 	}
-	mockEvent.On("PublishEvent", ctx, "resource.updated", expectedEventData).Return(nil)
+	mockEvent.On("PublishEvent", ctx, "resources", "resource.updated", expectedEventData).Return(nil)
 
 	// Act
 	result, err := service.UpdateUsersResource(ctx, userID, resourceID, &newName, &newContent)
@@ -431,7 +431,7 @@ func TestService_UpdateUsersResource_OnlyName(t *testing.T) {
 		"status":      updatedResource.Status,
 		"updated_at":  updatedResource.UpdatedAt,
 	}
-	mockEvent.On("PublishEvent", ctx, "resource.updated", expectedEventData).Return(nil)
+	mockEvent.On("PublishEvent", ctx, "resources", "resource.updated", expectedEventData).Return(nil)
 
 	// Act
 	result, err := service.UpdateUsersResource(ctx, userID, resourceID, &newName, nil)
@@ -497,7 +497,7 @@ func TestService_DeleteUsersResource_Success(t *testing.T) {
 	mockRepo.On("DeleteUsersResource", ctx, userID, resourceID).Return(nil)
 
 	// Use a more flexible matching for event data since time.Now() is dynamic
-	mockEvent.On("PublishEvent", ctx, "resource.deleted", mock.MatchedBy(func(data interface{}) bool {
+	mockEvent.On("PublishEvent", ctx, "resources", "resource.deleted", mock.MatchedBy(func(data interface{}) bool {
 		eventData, ok := data.(map[string]interface{})
 		if !ok {
 			return false
@@ -658,7 +658,7 @@ func TestService_UpdateResourceStatus_Success(t *testing.T) {
 	// Use flexible matching for event data since time.Now() is dynamic
 	// Note: There's a bug in the service where old_status shows the new status
 	// because resource.Status is updated before the event is published
-	mockEvent.On("PublishEvent", ctx, "resource.status_updated", mock.MatchedBy(func(data interface{}) bool {
+	mockEvent.On("PublishEvent", ctx, "resources", "resource.status_updated", mock.MatchedBy(func(data interface{}) bool {
 		eventData, ok := data.(map[string]interface{})
 		if !ok {
 			return false
@@ -921,7 +921,7 @@ func TestService_SaveUsersResource_EventPublishError(t *testing.T) {
 		"status":      savedResource.Status,
 		"created_at":  savedResource.CreatedAt,
 	}
-	mockEvent.On("PublishEvent", ctx, "resource.created", expectedEventData).Return(eventError)
+	mockEvent.On("PublishEvent", ctx, "resources", "resource.created", expectedEventData).Return(eventError)
 
 	// Act
 	result, statusCh, err := service.SaveUsersResource(ctx, userID, content, resourceType, name, url)
