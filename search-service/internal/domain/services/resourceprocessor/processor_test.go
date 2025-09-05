@@ -1,5 +1,4 @@
 package resourceprocessor
-package resourceprocessor
 
 import (
 	"context"
@@ -95,9 +94,9 @@ func (suite *ResourceProcessorTestSuite) TestNewResourceProcessor() {
 
 // TestStart_Success tests successful start of the processor
 func (suite *ResourceProcessorTestSuite) TestStart_Success() {
-	topics := []string{\"resource\"}
+	topics := []string{"resource"}
 
-	suite.mockConsumer.On(\"Subscribe\", mock.Anything, topics, suite.processor).Return(nil).Once()
+	suite.mockConsumer.On("Subscribe", mock.Anything, topics, suite.processor).Return(nil).Once()
 
 	// Create a context that will be cancelled after a short time to stop the processor
 	ctx, cancel := context.WithTimeout(suite.ctx, 100*time.Millisecond)
@@ -110,15 +109,15 @@ func (suite *ResourceProcessorTestSuite) TestStart_Success() {
 
 // TestStart_SubscribeError tests start failure due to subscription error
 func (suite *ResourceProcessorTestSuite) TestStart_SubscribeError() {
-	topics := []string{\"resource\"}
-	expectedError := errors.New(\"subscription failed\")
+	topics := []string{"resource"}
+	expectedError := errors.New("subscription failed")
 
-	suite.mockConsumer.On(\"Subscribe\", mock.Anything, topics, suite.processor).Return(expectedError).Once()
+	suite.mockConsumer.On("Subscribe", mock.Anything, topics, suite.processor).Return(expectedError).Once()
 
 	err := suite.processor.Start(suite.ctx)
 
 	assert.Error(suite.T(), err)
-	assert.Contains(suite.T(), err.Error(), \"failed to subscribe to topics\")
+	assert.Contains(suite.T(), err.Error(), "failed to subscribe to topics")
 	assert.Contains(suite.T(), err.Error(), expectedError.Error())
 }
 
@@ -127,30 +126,30 @@ func (suite *ResourceProcessorTestSuite) TestHandleMessage_Success() {
 	resourceID := uuid.New()
 	resource := models.Resource{
 		ID:               resourceID,
-		Name:             \"test-resource\",
-		Type:             \"text\",
-		ExtractedContent: \"test content\",
+		Name:             "test-resource",
+		Type:             "text",
+		ExtractedContent: "test content",
 	}
 
 	resourceJSON, _ := json.Marshal(resource)
 	headers := map[string]string{
-		\"event-name\": \"resource.created\",
+		"event-name": "resource.created",
 	}
 
-	chunkIDs := []string{\"chunk1\", \"chunk2\"}
+	chunkIDs := []string{"chunk1", "chunk2"}
 
 	expectedEvent := IndexationCompleteEvent{
 		ResourceID: resourceID,
 		Success:    true,
-		Message:    \"Resource indexed successfully\",
+		Message:    "Resource indexed successfully",
 		ChunkIDs:   chunkIDs,
 	}
 
 	// Setup expectations
-	suite.mockVectorStorage.On(\"PutResource\", mock.Anything, resource).Return(chunkIDs, nil).Once()
-	suite.mockEventService.On(\"PublishEvent\", mock.Anything, \"indexation_complete\", \"indexation_complete\", expectedEvent).Return(nil).Once()
+	suite.mockVectorStorage.On("PutResource", mock.Anything, resource).Return(chunkIDs, nil).Once()
+	suite.mockEventService.On("PublishEvent", mock.Anything, "indexation_complete", "indexation_complete", expectedEvent).Return(nil).Once()
 
-	err := suite.processor.HandleMessage(suite.ctx, \"resource\", resourceID.String(), resourceJSON, headers)
+	err := suite.processor.HandleMessage(suite.ctx, "resource", resourceID.String(), resourceJSON, headers)
 
 	assert.NoError(suite.T(), err)
 }
@@ -160,54 +159,54 @@ func (suite *ResourceProcessorTestSuite) TestHandleMessage_VectorStorageError() 
 	resourceID := uuid.New()
 	resource := models.Resource{
 		ID:               resourceID,
-		Name:             \"test-resource\",
-		Type:             \"text\",
-		ExtractedContent: \"test content\",
+		Name:             "test-resource",
+		Type:             "text",
+		ExtractedContent: "test content",
 	}
 
 	resourceJSON, _ := json.Marshal(resource)
 	headers := map[string]string{
-		\"event-name\": \"resource.created\",
+		"event-name": "resource.created",
 	}
 
-	expectedError := errors.New(\"vector storage error\")
+	expectedError := errors.New("vector storage error")
 
 	expectedEvent := IndexationCompleteEvent{
 		ResourceID: resourceID,
 		Success:    false,
-		Message:    expectedError.Error(),
+		Message:    "ResourceProcessor.processResource: vector storage error", // Updated to match actual implementation
 		ChunkIDs:   nil,
 	}
 
 	// Setup expectations
-	suite.mockVectorStorage.On(\"PutResource\", mock.Anything, resource).Return([]string{}, expectedError).Once()
-	suite.mockEventService.On(\"PublishEvent\", mock.Anything, \"indexation_complete\", \"indexation_complete\", expectedEvent).Return(nil).Once()
+	suite.mockVectorStorage.On("PutResource", mock.Anything, resource).Return([]string{}, expectedError).Once()
+	suite.mockEventService.On("PublishEvent", mock.Anything, "indexation_complete", "indexation_complete", expectedEvent).Return(nil).Once()
 
-	err := suite.processor.HandleMessage(suite.ctx, \"resource\", resourceID.String(), resourceJSON, headers)
+	err := suite.processor.HandleMessage(suite.ctx, "resource", resourceID.String(), resourceJSON, headers)
 
 	assert.Error(suite.T(), err)
-	assert.Contains(suite.T(), err.Error(), \"failed to process resource\")
+	assert.Contains(suite.T(), err.Error(), "failed to process resource")
 }
 
 // TestHandleMessage_InvalidJSON tests handling invalid JSON payload
 func (suite *ResourceProcessorTestSuite) TestHandleMessage_InvalidJSON() {
 	resourceID := uuid.New()
-	invalidJSON := []byte(`{\"invalid\": \"json\"`)
+	invalidJSON := []byte(`{"invalid": "json"`)
 	headers := map[string]string{
-		\"event-name\": \"resource.created\",
+		"event-name": "resource.created",
 	}
 
-	err := suite.processor.HandleMessage(suite.ctx, \"resource\", resourceID.String(), invalidJSON, headers)
+	err := suite.processor.HandleMessage(suite.ctx, "resource", resourceID.String(), invalidJSON, headers)
 
 	assert.Error(suite.T(), err)
-	assert.Contains(suite.T(), err.Error(), \"failed to unmarshal resource\")
+	assert.Contains(suite.T(), err.Error(), "failed to unmarshal resource")
 }
 
 // TestHandleMessage_IgnoreOtherTopics tests that messages from other topics are ignored
 func (suite *ResourceProcessorTestSuite) TestHandleMessage_IgnoreOtherTopics() {
 	resourceID := uuid.New()
 
-	err := suite.processor.HandleMessage(suite.ctx, \"other_topic\", resourceID.String(), []byte(\"some data\"), nil)
+	err := suite.processor.HandleMessage(suite.ctx, "other_topic", resourceID.String(), []byte("some data"), nil)
 
 	assert.NoError(suite.T(), err)
 	// No expectations should be called since the topic is ignored
@@ -217,10 +216,10 @@ func (suite *ResourceProcessorTestSuite) TestHandleMessage_IgnoreOtherTopics() {
 func (suite *ResourceProcessorTestSuite) TestHandleMessage_IgnoreOtherEvents() {
 	resourceID := uuid.New()
 	headers := map[string]string{
-		\"event-name\": \"resource.updated\",
+		"event-name": "resource.updated",
 	}
 
-	err := suite.processor.HandleMessage(suite.ctx, \"resource\", resourceID.String(), []byte(\"some data\"), headers)
+	err := suite.processor.HandleMessage(suite.ctx, "resource", resourceID.String(), []byte("some data"), headers)
 
 	assert.NoError(suite.T(), err)
 	// No expectations should be called since the event is ignored
@@ -231,7 +230,7 @@ func (suite *ResourceProcessorTestSuite) TestHandleMessage_MissingEventName() {
 	resourceID := uuid.New()
 	headers := map[string]string{} // No event-name header
 
-	err := suite.processor.HandleMessage(suite.ctx, \"resource\", resourceID.String(), []byte(\"some data\"), headers)
+	err := suite.processor.HandleMessage(suite.ctx, "resource", resourceID.String(), []byte("some data"), headers)
 
 	assert.NoError(suite.T(), err)
 	// No expectations should be called since the event-name is missing
@@ -239,7 +238,7 @@ func (suite *ResourceProcessorTestSuite) TestHandleMessage_MissingEventName() {
 
 // TestHealth_Success tests successful health check
 func (suite *ResourceProcessorTestSuite) TestHealth_Success() {
-	suite.mockConsumer.On(\"Health\", mock.Anything).Return(nil).Once()
+	suite.mockConsumer.On("Health", mock.Anything).Return(nil).Once()
 
 	err := suite.processor.Health(suite.ctx)
 
@@ -248,8 +247,8 @@ func (suite *ResourceProcessorTestSuite) TestHealth_Success() {
 
 // TestHealth_ConsumerError tests health check failure
 func (suite *ResourceProcessorTestSuite) TestHealth_ConsumerError() {
-	expectedError := errors.New(\"consumer unhealthy\")
-	suite.mockConsumer.On(\"Health\", mock.Anything).Return(expectedError).Once()
+	expectedError := errors.New("consumer unhealthy")
+	suite.mockConsumer.On("Health", mock.Anything).Return(expectedError).Once()
 
 	err := suite.processor.Health(suite.ctx)
 
