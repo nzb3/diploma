@@ -1,7 +1,7 @@
 production:
   server:
     host: "0.0.0.0"
-    port: "8081"
+    port: "8080"
     read_timeout: "5s"
     read_header_timeout: "2s"
     write_timeout: "500s"
@@ -9,18 +9,11 @@ production:
     max_header_bytes: 1048576
     shutdown_timeout: "10s"
   
-  ollama:
-    generator:
-      url: "http://ollama-generator:11434/"
-      model: "llama3.2:3b"
-    embedder:
-      url: "http://ollama-embedder:11434/"
-      model: "nomic-embed-text"
-  
-  vector_storage:
-    num_of_results: 10
-    max_tokens: 2048
-    embedding_dimensions: 384
+  database:
+    max_open_conns: 25
+    max_idle_conns: 5
+    conn_max_lifetime: "30m"
+    conn_max_idle_time: "5m"
   
   logger:
     level: "error"
@@ -43,8 +36,8 @@ production:
 
 debug:
   server:
-    host: "0.0.0.0"
-    port: "8081"
+    host: "localhost"
+    port: "8080"
     read_timeout: "30s"
     read_header_timeout: "5s"
     write_timeout: "30s"
@@ -52,18 +45,11 @@ debug:
     max_header_bytes: 1048576
     shutdown_timeout: "5s"
   
-  ollama:
-    generator:
-      url: "http://ollama-generator.deltanotes.orb.local"
-      model: "llama3.2:3b"
-    embedder:
-      url: "http://ollama-embedder.deltanotes.orb.local"
-      model: "nomic-embed-text"
-  
-  vector_storage:
-    num_of_results: 5
-    max_tokens: 1024
-    embedding_dimensions: 384
+  database:
+    max_open_conns: 5
+    max_idle_conns: 2
+    conn_max_lifetime: "30m"
+    conn_max_idle_time: "5m"
   
   logger:
     level: "debug"
@@ -83,4 +69,3 @@ debug:
     batch_size: 10
     max_retries: 1
     retry_delay: "2s"
-
