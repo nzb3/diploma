@@ -7,7 +7,7 @@ import (
 
 	"github.com/IBM/sarama"
 
-	"github.com/nzb3/diploma/resource-service/internal/domain/models/eventmodel"
+	"github.com/nzb3/diploma/search-service/internal/domain/models/eventmodel"
 )
 
 // Producer implements the MessageProducer interface using Apache Kafka
@@ -42,8 +42,6 @@ func NewKafkaProducer(config *Config) (*Producer, error) {
 	saramaConfig.Producer.RequiredAcks = config.RequiredAcks
 	saramaConfig.Producer.Compression = config.CompressionType
 
-	// Enable idempotent producer for exactly-once semantics
-	saramaConfig.Producer.Idempotent = true
 	saramaConfig.Net.MaxOpenRequests = 1
 
 	// Create the producer
@@ -56,16 +54,6 @@ func NewKafkaProducer(config *Config) (*Producer, error) {
 		producer: producer,
 		config:   config,
 	}, nil
-}
-
-// NewDefaultConfig returns a default Kafka producer configuration
-func NewDefaultConfig(brokers []string) *Config {
-	return &Config{
-		Brokers:         brokers,
-		RequiredAcks:    sarama.WaitForAll, // Wait for all replicas
-		RetryMax:        3,
-		CompressionType: sarama.CompressionSnappy,
-	}
 }
 
 // PublishEvent publishes an event to Kafka
@@ -130,4 +118,14 @@ func (p *Producer) Close() error {
 		return p.producer.Close()
 	}
 	return nil
+}
+
+// NewDefaultConfig returns a default Kafka producer configuration
+func NewDefaultConfig(brokers []string) *Config {
+	return &Config{
+		Brokers:         brokers,
+		RequiredAcks:    sarama.WaitForAll, // Wait for all replicas
+		RetryMax:        3,
+		CompressionType: sarama.CompressionSnappy,
+	}
 }

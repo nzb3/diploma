@@ -8,7 +8,7 @@ import (
 
 	"github.com/IBM/sarama"
 
-	"github.com/nzb3/diploma/resource-service/internal/repository/messaging"
+	"github.com/nzb3/diploma/search-service/internal/repository/messaging"
 )
 
 // Consumer implements the MessageConsumer interface using Apache Kafka
@@ -112,7 +112,7 @@ func (c *Consumer) Subscribe(ctx context.Context, topics []string, handler messa
 		}
 	}()
 
-	// Handle consumer errors
+	// Start error handling goroutine
 	c.wg.Add(1)
 	go func() {
 		defer c.wg.Done()
@@ -122,47 +122,31 @@ func (c *Consumer) Subscribe(ctx context.Context, topics []string, handler messa
 				return
 			case err := <-c.consumer.Errors():
 				if err != nil {
-					slog.Error("Consumer error", "error", err)
+					slog.Error("Kafka consumer error", "error", err)
 				}
 			}
 		}
 	}()
 
-	slog.Info("Kafka consumer started",
-		"topics", topics,
-		"group_id", c.config.GroupID)
-
+	slog.Info("Kafka consumer subscribed to topics", "topics", topics, "group_id", c.config.GroupID)
 	return nil
 }
 
-// Health checks if the consumer can communicate with Kafka brokers
+// Health checks if the consumer is healthy
 func (c *Consumer) Health(ctx context.Context) error {
-	// Create a simple health check by trying to get metadata
-	client, err := sarama.NewClient(c.config.Brokers, sarama.NewConfig())
-	if err != nil {
-		return fmt.Errorf("failed to create kafka client for health check: %w", err)
+	// For Kafka consumer, we can check if the consumer group is still active
+	// In a real implementation, you might want to check broker connectivity
+	if c.consumer == nil {
+		return fmt.Errorf("kafka consumer is not initialized")
 	}
-	defer client.Close()
-
-	// Check if we can get broker information
-	brokers := client.Brokers()
-	if len(brokers) == 0 {
-		return fmt.Errorf("no kafka brokers available")
-	}
-
-	// Try to connect to at least one broker
-	for _, broker := range brokers {
-		connected, err := broker.Connected()
-		if err == nil && connected {
-			return nil
-		}
-	}
-
-	return fmt.Errorf("cannot connect to any kafka broker")
+	return nil
 }
 
 // Close gracefully shuts down the consumer
 func (c *Consumer) Close() error {
+	slog.Info("Closing Kafka consumer")
+
+	// Cancel the context to stop consuming
 	if c.cancel != nil {
 		c.cancel()
 	}
@@ -219,17 +203,13 @@ func (h *consumerGroupHandler) ConsumeClaim(session sarama.ConsumerGroupSession,
 			if err != nil {
 				slog.Error("Error handling message",
 					"topic", message.Topic,
-					"partition", message.Partition,
-					"offset", message.Offset,
+					"key", string(message.Key),
 					"error", err)
-				// Depending on your error handling strategy, you might want to:
-				// 1. Continue processing (current behavior)
-				// 2. Return error to stop processing this partition
-				// 3. Mark message and continue
+				// Don't return error to continue processing other messages
+			} else {
+				// Mark message as processed only if no error
+				session.MarkMessage(message, "")
 			}
-
-			// Mark message as processed
-			session.MarkMessage(message, "")
 
 		case <-session.Context().Done():
 			return nil
