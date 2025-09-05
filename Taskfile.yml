@@ -2,10 +2,14 @@ version: '3'
 includes:
   resource-service:
     taskfile: ./resource-service/Taskfile.yml
+  search-service:
+    taskfile: ./search-service/Taskfile.yml
+  front:
+    taskfile: ./front/Taskfile.yml
 tasks:
   run-debug:
     cmds:
-      - docker compose -f docker-compose.yml -f docker-compose.debug.yml up --build -d
+      - docker compose -f docker-compose.yml -f docker-compose.debug.yml -f search-service/deploy/docker-compose.debug.yml -f resource-service/deploy/docker-compose.debug.yml -f front/deploy/docker-compose.debug.yml up --build -d
     silent: true
   run-prod:
     cmds:
@@ -18,29 +22,17 @@ tasks:
   run-frontend-local:
     cmds:
       - cd front && npm run dev
-  recreate-search-debug:
+  run-frontend-debug:
     cmds:
-      - docker compose -f docker-compose.yml -f docker-compose.debug.yml up --force-recreate --no-deps search_service --build -d
+      - docker compose -f docker-compose.yml -f docker-compose.debug.yml -f front/deploy/docker-compose.debug.yml up --build front -d
     silent: true
-  recreate-search-prod:
+  run-search-debug:
     cmds:
-      - docker compose -f docker-compose.yml up --force-recreate --no-deps search_service --build -d
+      - docker compose -f docker-compose.yml -f docker-compose.debug.yml -f search-service/deploy/docker-compose.debug.yml up --build search-service -d
     silent: true
-  recreate-resource-debug:
+  run-resource-debug:
     cmds:
-      - docker compose -f docker-compose.yml -f docker-compose.debug.yml up --force-recreate --no-deps resource_service --build -d
-    silent: true
-  recreate-resource-prod:
-    cmds:
-      - docker compose -f docker-compose.yml up --force-recreate --no-deps resource_service --build -d
-    silent: true
-  recreate-backend-debug:
-    cmds:
-      - docker compose -f docker-compose.yml -f docker-compose.debug.yml up --force-recreate --no-deps search_service resource_service --build -d
-    silent: true
-  recreate-backend-prod:
-    cmds:
-      - docker compose -f docker-compose.yml up --force-recreate --no-deps search_service resource_service --build -d
+      - docker compose -f docker-compose.yml -f docker-compose.debug.yml -f resource-service/deploy/docker-compose.debug.yml up --build resource-service -d
     silent: true
   down-all-delete-search_db:
     cmds:

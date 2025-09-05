@@ -38,12 +38,28 @@ func (a *App) Start(ctx context.Context) error {
 
 	eg, ctx := errgroup.WithContext(ctx)
 
+	// Start the HTTP server
 	eg.Go(func() error {
 		slog.Info("Starting server")
 		a.server.BaseContext = func(_ net.Listener) context.Context {
 			return ctx
 		}
 		return a.server.ListenAndServe()
+	})
+
+	// Start the outbox processor
+	eg.Go(func() error {
+		slog.Info("Starting outbox processor")
+		processor := a.serviceProvider.OutboxProcessor(ctx)
+		processor.Start(ctx)
+		return nil
+	})
+
+	// Start the resource processor for handling resource.created events
+	eg.Go(func() error {
+		slog.Info("Starting resource processor")
+		processor := a.serviceProvider.ResourceProcessor(ctx)
+		return processor.Start(ctx)
 	})
 
 	return fmt.Errorf("%s: %w", op, eg.Wait())
@@ -67,7 +83,8 @@ func (a *App) initDeps(ctx context.Context) error {
 
 func (a *App) initConfig(_ context.Context) error {
 	const op = "app.initConfig"
-	err := configurator.LoadConfig("configs", ".env", "env")
+	// Load configuration from config.yml (environment-aware)
+	err := configurator.LoadConfig(".", "config.yml", "yml")
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}

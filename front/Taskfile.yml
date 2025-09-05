@@ -1,0 +1,38 @@
+version: '3'
+
+tasks:
+  install:
+    desc: Install frontend dependencies
+    dir: "{{.TASKFILE_DIR}}"
+    cmds:
+      - npm install
+
+  dev:
+    desc: Run frontend in development mode
+    dir: "{{.TASKFILE_DIR}}"
+    cmds:
+      - npm run dev
+
+  build:
+    desc: Build frontend for production
+    dir: "{{.TASKFILE_DIR}}"
+    cmds:
+      - npm run build
+
+  preview:
+    desc: Preview production build locally
+    dir: "{{.TASKFILE_DIR}}"
+    cmds:
+      - npm run preview
+
+  lint:
+    desc: Lint frontend code
+    dir: "{{.TASKFILE_DIR}}"
+    cmds:
+      - npm run lint
+
+  type-check:
+    desc: Run TypeScript type checking
+    dir: "{{.TASKFILE_DIR}}"
+    cmds:
+      - npm run type-check

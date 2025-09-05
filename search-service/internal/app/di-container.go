@@ -10,22 +10,24 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
-	"github.com/nzb3/closer"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nzb3/slogmanager"
 	"github.com/tmc/langchaingo/llms/ollama"
-	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 
 	"github.com/nzb3/diploma/search-service/internal/controllers"
 	"github.com/nzb3/diploma/search-service/internal/controllers/middleware"
-	"github.com/nzb3/diploma/search-service/internal/controllers/resourcecontroller"
 	"github.com/nzb3/diploma/search-service/internal/controllers/searchcontroller"
-	"github.com/nzb3/diploma/search-service/internal/domain/services/resourceservcie"
+	"github.com/nzb3/diploma/search-service/internal/domain/services/eventservice"
+	"github.com/nzb3/diploma/search-service/internal/domain/services/outboxprocessor"
+	"github.com/nzb3/diploma/search-service/internal/domain/services/resourceprocessor"
 	"github.com/nzb3/diploma/search-service/internal/domain/services/searchservice"
-	"github.com/nzb3/diploma/search-service/internal/repository/gormpg"
-	"github.com/nzb3/diploma/search-service/internal/repository/integration/embedder"
-	"github.com/nzb3/diploma/search-service/internal/repository/integration/generator"
-	"github.com/nzb3/diploma/search-service/internal/repository/integration/resourceprocessor"
+	"github.com/nzb3/diploma/search-service/internal/repository/embedder"
+	"github.com/nzb3/diploma/search-service/internal/repository/events/pgx"
+	"github.com/nzb3/diploma/search-service/internal/repository/generator"
+	"github.com/nzb3/diploma/search-service/internal/repository/messaging"
+	"github.com/nzb3/diploma/search-service/internal/repository/messaging/kafka"
+	"github.com/nzb3/diploma/search-service/internal/repository/postgres"
 	"github.com/nzb3/diploma/search-service/internal/repository/vectorstorage"
 	"github.com/nzb3/diploma/search-service/internal/server"
 )
@@ -38,20 +40,25 @@ type ServiceProvider struct {
 	embedder            *embedder.Embedder
 	generator           *generator.Generator
 	server              *http.Server
-	resourceController  *resourcecontroller.Controller
 	ginEngine           *gin.Engine
 	vectorStore         *vectorstorage.VectorStorage
 	vectorStorageConfig *vectorstorage.Config
-	resourceService     *resourceservcie.Service
+	postgresConfig      *postgres.Config
 	serverConfig        *server.Config
-	repositoryConfig    *gormpg.Config
-	repository          *gormpg.Repository
+	kafkaConfig         *kafka.Config
+	authConfig          *middleware.AuthConfig
 	gormDB              *gorm.DB
 	searchController    *searchcontroller.Controller
 	searchService       *searchservice.Service
-	resourceProcessor   *resourceprocessor.ResourceProcessor
-	authConfig          *middleware.AuthMiddlewareConfig
 	authMiddleware      *middleware.AuthMiddleware
+	// Event system components
+	pgxPool           *pgxpool.Pool
+	eventRepository   *pgx.Repository
+	kafkaProducer     *kafka.Producer
+	kafkaConsumer     messaging.MessageConsumer
+	eventService      *eventservice.Service
+	outboxProcessor   *outboxprocessor.Processor
+	resourceProcessor *resourceprocessor.Processor
 }
 
 // NewServiceProvider creates and returns a new instance of ServiceProvider
@@ -67,6 +74,7 @@ func (sp *ServiceProvider) Logger(ctx context.Context) *slogmanager.Manager {
 	_ = ctx
 	manager := slogmanager.New()
 	manager.AddWriter("stdout", slogmanager.NewWriter(os.Stdout, slogmanager.WithTextFormat()))
+	sp.slogManager = manager
 	slog.SetLogLoggerLevel(slog.LevelDebug)
 	return sp.slogManager
 }
@@ -143,47 +151,52 @@ func (sp *ServiceProvider) Generator(ctx context.Context) *generator.Generator {
 	return g
 }
 
+// PostgresConfig returns the PostgreSQL configuration, creating it if it doesn't exist
+func (sp *ServiceProvider) PostgresConfig(ctx context.Context) *postgres.Config {
+	if sp.postgresConfig != nil {
+		return sp.postgresConfig
+	}
+
+	config, err := postgres.NewConfig()
+	if err != nil {
+		sp.Logger(ctx).Logger().Error("error creating postgres config", "error", err.Error())
+		panic(fmt.Errorf("error creating postgres config: %w", err))
+	}
+
+	sp.postgresConfig = config
+	return config
+}
+
+// KafkaConfig returns the Kafka configuration, creating it if it doesn't exist
+func (sp *ServiceProvider) KafkaConfig(ctx context.Context) *kafka.Config {
+	if sp.kafkaConfig != nil {
+		return sp.kafkaConfig
+	}
+
+	config, err := kafka.NewConfig()
+	if err != nil {
+		sp.Logger(ctx).Logger().Error("error creating kafka config", "error", err.Error())
+		panic(fmt.Errorf("error creating kafka config: %w", err))
+	}
+
+	sp.kafkaConfig = config
+	return config
+}
+
 // AuthConfig returns the auth configuration, creating it if it doesn't exist
-func (sp *ServiceProvider) AuthConfig(ctx context.Context) *middleware.AuthMiddlewareConfig {
+func (sp *ServiceProvider) AuthConfig(ctx context.Context) *middleware.AuthConfig {
 	if sp.authConfig != nil {
 		return sp.authConfig
 	}
 
-	host := os.Getenv("AUTH_HOST")
-	if host == "" {
-		slog.Error("AUTH_HOST environment variable not set")
-		return nil
-	}
-	port := os.Getenv("AUTH_PORT")
-	if port == "" {
-		slog.Error("AUTH_PORT environment variable not set")
-		return nil
-	}
-	realm := os.Getenv("AUTH_REALM")
-	if realm == "" {
-		slog.Error("AUTH_REALM environment variable not set")
-		return nil
-	}
-	clientID := os.Getenv("AUTH_CLIENT_ID")
-	if clientID == "" {
-		slog.Error("AUTH_CLIENT_ID environment variable not set")
-		return nil
-	}
-	clientSecret := os.Getenv("AUTH_CLIENT_SECRET")
-	if clientSecret == "" {
-		slog.Error("AUTH_CLIENT_SECRET environment variable not set")
-		return nil
+	config, err := middleware.NewAuthConfig()
+	if err != nil {
+		sp.Logger(ctx).Logger().Error("error creating auth config", "error", err.Error())
+		panic(fmt.Errorf("error creating auth config: %w", err))
 	}
 
-	sp.authConfig = &middleware.AuthMiddlewareConfig{
-		Host:         host,
-		Port:         port,
-		Realm:        realm,
-		ClientID:     clientID,
-		ClientSecret: clientSecret,
-	}
-
-	return sp.authConfig
+	sp.authConfig = config
+	return config
 }
 
 // GinEngine returns the configured Gin web engine instance, creating it if it doesn't exist
@@ -211,7 +224,6 @@ func (sp *ServiceProvider) GinEngine(ctx context.Context) *gin.Engine {
 	engine = sp.setupRoutes(
 		ctx,
 		engine,
-		sp.ResourceController(ctx),
 		sp.SearchController(ctx),
 	)
 
@@ -251,7 +263,7 @@ func (sp *ServiceProvider) VectorStorageConfig(ctx context.Context) *vectorstora
 		return sp.vectorStorageConfig
 	}
 
-	config, err := vectorstorage.NewConfig(sp.RepositoryConfig(ctx).DSN)
+	config, err := vectorstorage.NewConfig()
 	if err != nil {
 		sp.Logger(ctx).Logger().Error("error creating vector storage config", "error", err.Error())
 		panic(fmt.Errorf("error creating vector storage config: %w", err))
@@ -271,6 +283,7 @@ func (sp *ServiceProvider) VectorStore(ctx context.Context) *vectorstorage.Vecto
 	vectorStore, err := vectorstorage.NewVectorStorage(
 		ctx,
 		sp.VectorStorageConfig(ctx),
+		sp.PostgresConfig(ctx),
 		sp.Embedder(ctx),
 		sp.Generator(ctx),
 	)
@@ -281,93 +294,7 @@ func (sp *ServiceProvider) VectorStore(ctx context.Context) *vectorstorage.Vecto
 	}
 
 	sp.vectorStore = vectorStore
-
 	return vectorStore
-}
-
-// RepositoryConfig returns the repository configuration, creating it if it doesn't exist
-func (sp *ServiceProvider) RepositoryConfig(ctx context.Context) *gormpg.Config {
-	if sp.repositoryConfig != nil {
-		return sp.repositoryConfig
-	}
-
-	config, err := gormpg.NewConfig()
-	if err != nil {
-		sp.Logger(ctx).Logger().Error("error creating repository config", "error", err.Error())
-		panic(fmt.Errorf("error creating repository config: %w", err))
-	}
-
-	sp.repositoryConfig = config
-
-	return config
-}
-
-// GormDB returns the GORM database instance, creating it if it doesn't exist
-func (sp *ServiceProvider) GormDB(ctx context.Context) *gorm.DB {
-	if sp.gormDB != nil {
-		return sp.gormDB
-	}
-
-	db, err := gorm.Open(postgres.Open(sp.RepositoryConfig(ctx).DSN))
-	if err != nil {
-		sp.Logger(ctx).Logger().Error("error creating gorm db", "error", err.Error())
-		panic(fmt.Errorf("error creating gorm db: %w", err))
-	}
-
-	sp.gormDB = db
-
-	closer.Add(func() error {
-		sqlDB, err := db.DB()
-		if err != nil {
-			return fmt.Errorf("failed to get sql.DB instance: %w", err)
-		}
-		return sqlDB.Close()
-	})
-
-	return db
-}
-
-// Repository returns the GORM repository instance, creating it if it doesn't exist
-func (sp *ServiceProvider) Repository(ctx context.Context) *gormpg.Repository {
-	if sp.repository != nil {
-		return sp.repository
-	}
-
-	repository, err := gormpg.NewRepository(sp.GormDB(ctx))
-	if err != nil {
-		sp.Logger(ctx).Logger().Error("error creating repository", "error", err.Error())
-		panic(fmt.Errorf("error creating repository: %w", err))
-	}
-
-	sp.repository = repository
-
-	return repository
-}
-
-// ResourceProcessor returns the resource processor instance, creating it if it doesn't exist
-func (sp *ServiceProvider) ResourceProcessor(ctx context.Context) *resourceprocessor.ResourceProcessor {
-	if sp.resourceProcessor != nil {
-		return sp.resourceProcessor
-	}
-
-	resourceProcessor := resourceprocessor.NewResourceProcessor(sp.VectorStore(ctx))
-
-	sp.resourceProcessor = resourceProcessor
-
-	return resourceProcessor
-}
-
-// ResourceService returns the resource service instance, creating it if it doesn't exist
-func (sp *ServiceProvider) ResourceService(ctx context.Context) *resourceservcie.Service {
-	if sp.resourceService != nil {
-		return sp.resourceService
-	}
-
-	service := resourceservcie.NewService(sp.Repository(ctx), sp.ResourceProcessor(ctx))
-
-	sp.resourceService = service
-
-	return service
 }
 
 // SearchController returns the search controller instance, creating it if it doesn't exist
@@ -389,24 +316,15 @@ func (sp *ServiceProvider) SearchService(ctx context.Context) *searchservice.Ser
 		return sp.searchService
 	}
 
-	service := searchservice.NewService(sp.VectorStore(ctx), sp.Repository(ctx))
+	// Create search service with optional event service
+	service := searchservice.NewService(
+		sp.VectorStore(ctx),
+		sp.EventService(ctx),
+	)
 
 	sp.searchService = service
 
 	return service
-}
-
-// ResourceController returns the resource controller instance, creating it if it doesn't exist
-func (sp *ServiceProvider) ResourceController(ctx context.Context) *resourcecontroller.Controller {
-	if sp.resourceController != nil {
-		return sp.resourceController
-	}
-
-	controller := resourcecontroller.NewController(sp.ResourceService(ctx))
-
-	sp.resourceController = controller
-
-	return controller
 }
 
 // ServerConfig returns the server configuration, creating it if it doesn't exist
@@ -439,4 +357,146 @@ func (sp *ServiceProvider) Server(ctx context.Context) *http.Server {
 
 	sp.server = s
 	return s
+}
+
+// PgxPool returns the PostgreSQL connection pool, creating it if it doesn't exist
+func (sp *ServiceProvider) PgxPool(ctx context.Context) *pgxpool.Pool {
+	if sp.pgxPool != nil {
+		return sp.pgxPool
+	}
+
+	postgresConfig := sp.PostgresConfig(ctx)
+	dbURL := postgresConfig.GetConnectionString()
+
+	config, err := pgxpool.ParseConfig(dbURL)
+	if err != nil {
+		sp.Logger(ctx).Logger().Error("error parsing database URL", "error", err.Error())
+		panic(fmt.Errorf("error parsing database URL: %w", err))
+	}
+
+	pool, err := pgxpool.NewWithConfig(ctx, config)
+	if err != nil {
+		sp.Logger(ctx).Logger().Error("error creating database pool", "error", err.Error())
+		panic(fmt.Errorf("error creating database pool: %w", err))
+	}
+
+	// Test the connection
+	if err := pool.Ping(ctx); err != nil {
+		sp.Logger(ctx).Logger().Error("error pinging database", "error", err.Error())
+		panic(fmt.Errorf("error pinging database: %w", err))
+	}
+
+	sp.pgxPool = pool
+	return pool
+}
+
+// EventRepository returns the event repository instance, creating it if it doesn't exist
+func (sp *ServiceProvider) EventRepository(ctx context.Context) *pgx.Repository {
+	if sp.eventRepository != nil {
+		return sp.eventRepository
+	}
+
+	repo, err := pgx.NewRepository(ctx, sp.PgxPool(ctx))
+	if err != nil {
+		sp.Logger(ctx).Logger().Error("error creating event repository", "error", err.Error())
+		panic(fmt.Errorf("error creating event repository: %w", err))
+	}
+
+	sp.eventRepository = repo
+	return repo
+}
+
+// KafkaProducer returns the Kafka producer instance, creating it if it doesn't exist
+func (sp *ServiceProvider) KafkaProducer(ctx context.Context) *kafka.Producer {
+	if sp.kafkaProducer != nil {
+		return sp.kafkaProducer
+	}
+
+	kafkaConfig := sp.KafkaConfig(ctx)
+
+	producer, err := kafka.NewKafkaProducer(kafkaConfig)
+	if err != nil {
+		sp.Logger(ctx).Logger().Error("error creating Kafka producer", "error", err.Error())
+		panic(fmt.Errorf("error creating Kafka producer: %w", err))
+	}
+
+	sp.kafkaProducer = producer
+	return producer
+}
+
+// EventService returns the event service instance, creating it if it doesn't exist
+func (sp *ServiceProvider) EventService(ctx context.Context) *eventservice.Service {
+	if sp.eventService != nil {
+		return sp.eventService
+	}
+
+	service := eventservice.NewEventService(
+		sp.EventRepository(ctx),
+		sp.KafkaProducer(ctx),
+	)
+
+	sp.eventService = service
+	return service
+}
+
+// OutboxProcessor returns the outbox processor instance, creating it if it doesn't exist
+func (sp *ServiceProvider) OutboxProcessor(ctx context.Context) *outboxprocessor.Processor {
+	if sp.outboxProcessor != nil {
+		return sp.outboxProcessor
+	}
+
+	processor := outboxprocessor.NewDefaultOutboxProcessor(
+		sp.EventService(ctx),
+	)
+
+	sp.outboxProcessor = processor
+	return processor
+}
+
+// KafkaConsumer returns the Kafka consumer instance, creating it if it doesn't exist
+func (sp *ServiceProvider) KafkaConsumer(ctx context.Context) messaging.MessageConsumer {
+	if sp.kafkaConsumer != nil {
+		return sp.kafkaConsumer
+	}
+
+	kafkaConsumerConfig, err := kafka.NewConsumerConfig()
+	if err != nil {
+		// Log the error if logger is available, otherwise use standard logging
+		if sp.slogManager != nil {
+			sp.Logger(ctx).Logger().Error("error creating kafka consumer config", "error", err.Error())
+		} else {
+			slog.Error("error creating kafka consumer config", "error", err.Error())
+		}
+		panic(fmt.Errorf("error creating kafka consumer config: %w", err))
+	}
+
+	consumer, err := kafka.NewKafkaConsumer(kafkaConsumerConfig)
+	if err != nil {
+		// Log the error if logger is available, otherwise use standard logging
+		if sp.slogManager != nil {
+			sp.Logger(ctx).Logger().Error("error creating kafka consumer", "error", err.Error())
+		} else {
+			slog.Error("error creating kafka consumer", "error", err.Error())
+		}
+		panic(fmt.Errorf("error creating kafka consumer: %w", err))
+	}
+
+	sp.kafkaConsumer = consumer
+	return consumer
+}
+
+// ResourceProcessor returns the resource processor instance, creating it if it doesn't exist
+func (sp *ServiceProvider) ResourceProcessor(ctx context.Context) *resourceprocessor.Processor {
+	if sp.resourceProcessor != nil {
+		return sp.resourceProcessor
+	}
+
+	processor := resourceprocessor.NewResourceProcessor(
+		sp.VectorStore(ctx),
+		sp.EventService(ctx),
+		sp.KafkaConsumer(ctx),
+	)
+
+	sp.resourceProcessor = processor
+	return processor
 }

@@ -12,20 +12,20 @@ import (
 func NewServer(ctx context.Context, router *gin.Engine, cfg *Config) *http.Server {
 
 	s := &http.Server{
-		Addr:              ":" + cfg.HTTP.Port,
+		Addr:              ":" + cfg.Port,
 		Handler:           router,
-		ReadTimeout:       cfg.HTTP.ReadTimeout,
-		ReadHeaderTimeout: cfg.HTTP.ReadHeaderTimeout,
-		WriteTimeout:      cfg.HTTP.WriteTimeout,
-		IdleTimeout:       cfg.HTTP.IdleTimeout,
-		MaxHeaderBytes:    cfg.HTTP.MaxHeaderBytes,
+		ReadTimeout:       cfg.ReadTimeout,
+		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
+		WriteTimeout:      cfg.WriteTimeout,
+		IdleTimeout:       cfg.IdleTimeout,
+		MaxHeaderBytes:    cfg.MaxHeaderBytes,
 	}
 
 	go func() {
 		<-ctx.Done()
 		shutdownCtx, cancel := context.WithTimeout(
 			ctx,
-			cfg.HTTP.ShutdownTimeout,
+			cfg.ShutdownTimeout,
 		)
 		defer cancel()
 

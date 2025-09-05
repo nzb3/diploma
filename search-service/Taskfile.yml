@@ -1,0 +1,8 @@
+version: '3'
+
+tasks:
+  sqlc-generate:
+    desc: Generate sqlc code
+    dir: "{{.TASKFILE_DIR}}"
+    cmds:
+      - go tool sqlc generate

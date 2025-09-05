@@ -83,7 +83,8 @@ func (a *App) initDeps(ctx context.Context) error {
 
 func (a *App) initConfig(_ context.Context) error {
 	const op = "app.initConfig"
-	err := configurator.LoadConfig("configs", ".env", "env")
+	// Load configuration from config.yml (environment-aware)
+	err := configurator.LoadConfig(".", "config.yml", "yml")
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}

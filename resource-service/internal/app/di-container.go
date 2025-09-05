@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/gin-contrib/cors"
@@ -52,6 +51,8 @@ type ServiceProvider struct {
 	authConfig          *middleware.AuthMiddlewareConfig
 	authMiddleware      *middleware.AuthMiddleware
 	// Kafka components
+	kafkaConfig         *kafka.Config
+	kafkaConsumerConfig *kafka.ConsumerConfig
 	kafkaProducer       messaging.MessageProducer
 	kafkaConsumer       messaging.MessageConsumer
 	eventService        *eventservice.Service
@@ -120,39 +121,13 @@ func (sp *ServiceProvider) AuthConfig(ctx context.Context) *middleware.AuthMiddl
 		return sp.authConfig
 	}
 
-	host := os.Getenv("AUTH_HOST")
-	if host == "" {
-		slog.Error("AUTH_HOST environment variable not set")
-		return nil
-	}
-	port := os.Getenv("AUTH_PORT")
-	if port == "" {
-		slog.Error("AUTH_PORT environment variable not set")
-		return nil
-	}
-	realm := os.Getenv("AUTH_REALM")
-	if realm == "" {
-		slog.Error("AUTH_REALM environment variable not set")
-		return nil
-	}
-	clientID := os.Getenv("AUTH_CLIENT_ID")
-	if clientID == "" {
-		slog.Error("AUTH_CLIENT_ID environment variable not set")
-		return nil
-	}
-	clientSecret := os.Getenv("AUTH_CLIENT_SECRET")
-	if clientSecret == "" {
-		slog.Error("AUTH_CLIENT_SECRET environment variable not set")
-		return nil
+	config, err := middleware.NewAuthMiddlewareConfig()
+	if err != nil {
+		sp.Logger(ctx).Logger().Error("error creating auth middleware config", "error", err.Error())
+		panic(fmt.Errorf("error creating auth middleware config: %w", err))
 	}
 
-	sp.authConfig = &middleware.AuthMiddlewareConfig{
-		Host:         host,
-		Port:         port,
-		Realm:        realm,
-		ClientID:     clientID,
-		ClientSecret: clientSecret,
-	}
+	sp.authConfig = config
 
 	return sp.authConfig
 }
@@ -221,10 +196,13 @@ func (sp *ServiceProvider) RepositoryConfig(ctx context.Context) *pgx.Config {
 		return sp.repositoryConfig
 	}
 
-	config := pgx.NewConfig()
+	config, err := pgx.NewConfig()
+	if err != nil {
+		sp.Logger(ctx).Logger().Error("error creating repository config", "error", err.Error())
+		panic(fmt.Errorf("error creating repository config: %w", err))
+	}
 
 	sp.repositoryConfig = config
-
 	return config
 }
 
@@ -234,10 +212,31 @@ func (sp *ServiceProvider) PgxPool(ctx context.Context) *pgxpool.Pool {
 		return sp.pgxPool
 	}
 
-	pool, err := pgx.NewPgxPool(ctx, sp.RepositoryConfig(ctx))
+	repoConfig := sp.RepositoryConfig(ctx)
+	dbURL := repoConfig.GetDSN()
+
+	config, err := pgxpool.ParseConfig(dbURL)
 	if err != nil {
-		sp.Logger(ctx).Logger().Error("error creating pgx pool", "error", err.Error())
-		panic(fmt.Errorf("error creating pgx pool: %w", err))
+		sp.Logger(ctx).Logger().Error("error parsing database URL", "error", err.Error())
+		panic(fmt.Errorf("error parsing database URL: %w", err))
+	}
+
+	// Set connection pool settings
+	config.MaxConns = int32(repoConfig.MaxOpenConns)
+	config.MinConns = int32(repoConfig.MaxIdleConns)
+	config.MaxConnLifetime = repoConfig.ConnMaxLifetime
+	config.MaxConnIdleTime = repoConfig.ConnMaxIdleTime
+
+	pool, err := pgxpool.NewWithConfig(ctx, config)
+	if err != nil {
+		sp.Logger(ctx).Logger().Error("error creating database pool", "error", err.Error())
+		panic(fmt.Errorf("error creating database pool: %w", err))
+	}
+
+	// Test the connection
+	if err := pool.Ping(ctx); err != nil {
+		sp.Logger(ctx).Logger().Error("error pinging database", "error", err.Error())
+		panic(fmt.Errorf("error pinging database: %w", err))
 	}
 
 	sp.pgxPool = pool
@@ -328,22 +327,47 @@ func (sp *ServiceProvider) ResourceController(ctx context.Context) *resourcecont
 	return controller
 }
 
+// KafkaConfig returns the Kafka configuration, creating it if it doesn't exist
+func (sp *ServiceProvider) KafkaConfig(ctx context.Context) *kafka.Config {
+	if sp.kafkaConfig != nil {
+		return sp.kafkaConfig
+	}
+
+	config, err := kafka.NewConfig()
+	if err != nil {
+		sp.Logger(ctx).Logger().Error("error creating kafka config", "error", err.Error())
+		panic(fmt.Errorf("error creating kafka config: %w", err))
+	}
+
+	sp.kafkaConfig = config
+	return config
+}
+
+// KafkaConsumerConfig returns the Kafka consumer configuration, creating it if it doesn't exist
+func (sp *ServiceProvider) KafkaConsumerConfig(ctx context.Context) *kafka.ConsumerConfig {
+	if sp.kafkaConsumerConfig != nil {
+		return sp.kafkaConsumerConfig
+	}
+
+	config, err := kafka.NewConsumerConfig()
+	if err != nil {
+		sp.Logger(ctx).Logger().Error("error creating kafka consumer config", "error", err.Error())
+		panic(fmt.Errorf("error creating kafka consumer config: %w", err))
+	}
+
+	sp.kafkaConsumerConfig = config
+	return config
+}
+
 // KafkaProducer returns the Kafka producer instance, creating it if it doesn't exist
 func (sp *ServiceProvider) KafkaProducer(ctx context.Context) messaging.MessageProducer {
 	if sp.kafkaProducer != nil {
 		return sp.kafkaProducer
 	}
 
-	// Get Kafka brokers from environment variable
-	brokersEnv := os.Getenv("KAFKA_BROKERS")
-	if brokersEnv == "" {
-		brokersEnv = "kafka:29092" // Default value
-	}
-	brokers := strings.Split(brokersEnv, ",")
+	kafkaConfig := sp.KafkaConfig(ctx)
 
-	// Create Kafka producer with default configuration
-	config := kafka.NewDefaultConfig(brokers)
-	producer, err := kafka.NewKafkaProducer(config)
+	producer, err := kafka.NewKafkaProducer(kafkaConfig)
 	if err != nil {
 		sp.Logger(ctx).Logger().Error("error creating kafka producer", "error", err.Error())
 		panic(fmt.Errorf("error creating kafka producer: %w", err))
@@ -388,22 +412,9 @@ func (sp *ServiceProvider) KafkaConsumer(ctx context.Context) messaging.MessageC
 		return sp.kafkaConsumer
 	}
 
-	// Get Kafka brokers from environment variable
-	brokersEnv := os.Getenv("KAFKA_BROKERS")
-	if brokersEnv == "" {
-		brokersEnv = "kafka:29092" // Default value
-	}
-	brokers := strings.Split(brokersEnv, ",")
+	kafkaConsumerConfig := sp.KafkaConsumerConfig(ctx)
 
-	// Get consumer group ID from environment variable
-	groupID := os.Getenv("KAFKA_CONSUMER_GROUP_ID")
-	if groupID == "" {
-		groupID = "resource-service-indexation-consumer" // Default value
-	}
-
-	// Create Kafka consumer with default configuration
-	config := kafka.NewDefaultConsumerConfig(brokers, groupID)
-	consumer, err := kafka.NewKafkaConsumer(config)
+	consumer, err := kafka.NewKafkaConsumer(kafkaConsumerConfig)
 	if err != nil {
 		sp.Logger(ctx).Logger().Error("error creating kafka consumer", "error", err.Error())
 		panic(fmt.Errorf("error creating kafka consumer: %w", err))

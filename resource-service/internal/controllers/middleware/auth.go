@@ -10,10 +10,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/nzb3/diploma/resource-service/internal/validator"
+
 	"github.com/Nerzal/gocloak/v13"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 
+	"github.com/nzb3/diploma/resource-service/internal/configurator"
 	"github.com/nzb3/diploma/resource-service/internal/controllers"
 )
 
@@ -23,6 +26,22 @@ type AuthMiddlewareConfig struct {
 	Realm        string
 	ClientID     string
 	ClientSecret string
+}
+
+func NewAuthMiddlewareConfig() (*AuthMiddlewareConfig, error) {
+	config := new(AuthMiddlewareConfig)
+	config.Host = configurator.GetString("auth.host")
+	config.Port = configurator.GetString("auth.port")
+	config.Realm = configurator.GetString("auth.realm")
+	config.ClientID = configurator.GetString("auth.client_id")
+	config.ClientSecret = configurator.GetString("auth.client_secret")
+
+	err := validator.Validate(config)
+	if err != nil {
+		return nil, fmt.Errorf("invalid auth middleware config: %w", err)
+	}
+
+	return config, nil
 }
 
 type AuthMiddleware struct {

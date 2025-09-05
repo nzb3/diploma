@@ -23,26 +23,20 @@ const (
 )
 
 // AuthMiddlewareConfig holds necessary configuration for Keycloak authentication
-type AuthMiddlewareConfig struct {
-	Host         string
-	Port         string
-	Realm        string
-	ClientID     string
-	ClientSecret string
-}
+type AuthMiddlewareConfig = AuthConfig
 
 // AuthMiddleware provides JWT validation with Keycloak
 type AuthMiddleware struct {
 	keycloak    *gocloak.GoCloak
-	config      *AuthMiddlewareConfig
+	config      *AuthConfig
 	publicKey   string
 	publicKeyMu sync.RWMutex
 	lastFetched time.Time
 }
 
 // NewAuthMiddleware creates a new middleware instance
-func NewAuthMiddleware(config *AuthMiddlewareConfig) *AuthMiddleware {
-	keycloakURL := fmt.Sprintf("http://%s:%s", config.Host, config.Port)
+func NewAuthMiddleware(config *AuthConfig) *AuthMiddleware {
+	keycloakURL := config.GetKeycloakURL()
 	return &AuthMiddleware{
 		keycloak: gocloak.NewClient(keycloakURL),
 		config:   config,
