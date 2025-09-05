@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/google/uuid"
-
 	"github.com/nzb3/diploma/search-service/internal/domain/models"
 )
 
@@ -28,20 +26,27 @@ type vectorStorage interface {
 	SemanticSearch(ctx context.Context, query string) ([]models.Reference, error)
 }
 
-type repository interface {
-	GetResourceIDByReference(ctx context.Context, reference models.Reference) (uuid.UUID, error)
+type eventPublisher interface {
+	PublishEvent(ctx context.Context, topic string, eventName string, data interface{}) error
 }
 
 type Service struct {
-	vectorStorage vectorStorage
-	repository    repository
+	vectorStorage  vectorStorage
+	eventPublisher eventPublisher // Optional event publisher
 }
 
-func NewService(vs vectorStorage, r repository) *Service {
+// NewService creates a new search service with optional event publisher
+func NewService(vs vectorStorage, eventPublisher ...eventPublisher) *Service {
 	slog.Debug("Initializing search service",
 		"vector_storage_type", fmt.Sprintf("%T", vs),
-		"repository_type", fmt.Sprintf("%T", r))
-	return &Service{vectorStorage: vs, repository: r}
+		"repository_type", fmt.Sprintf("%T"))
+
+	service := &Service{vectorStorage: vs}
+	if len(eventPublisher) > 0 {
+		service.eventPublisher = eventPublisher[0]
+		slog.Debug("Event publisher configured for search service")
+	}
+	return service
 }
 
 func (s *Service) GetAnswerStream(
@@ -60,7 +65,7 @@ func (s *Service) GetAnswerStream(
 	refsOutputCh := make(chan []models.Reference)
 	searchResultOutputCh := make(chan models.SearchResult)
 
-	answerCh, rawRefsCh, chunkCh, getAnswerErrCh := s.vectorStorage.GetAnswerStream(
+	answerCh, refsCh, chunkCh, getAnswerErrCh := s.vectorStorage.GetAnswerStream(
 		ctx,
 		question,
 		WithNumberOfReferences(numReferences),
@@ -78,15 +83,9 @@ func (s *Service) GetAnswerStream(
 
 		for {
 			select {
-			case refs := <-rawRefsCh:
-				processedRefs, err := s.processReferences(ctx, refs)
-				if err != nil {
-					slog.Error("Error processing references", "err", err)
-					errOutputCh <- fmt.Errorf("%s: %w", op, err)
-					return
-				}
-				processedRefsCh <- processedRefs
-				refsOutputCh <- processedRefs
+			case refs := <-refsCh:
+				processedRefsCh <- refs
+				refsOutputCh <- refs
 			case <-ctx.Done():
 				slog.Debug("Context cancelled")
 				errOutputCh <- ctx.Err()
@@ -117,22 +116,32 @@ func (s *Service) GetAnswer(ctx context.Context, question string) (models.Search
 	slog.InfoContext(ctx, "Getting answer",
 		"question", question)
 
-	answer, rawRefs, err := s.vectorStorage.GetAnswer(ctx, question)
+	answer, refs, err := s.vectorStorage.GetAnswer(ctx, question)
 	if err != nil {
 		slog.Error("Error getting answer", "err", err)
 		return models.SearchResult{}, fmt.Errorf("%s: %w", op, err)
 	}
 
-	processedRefs, err := s.processReferences(ctx, rawRefs)
-	if err != nil {
-		slog.Error("Error processing references", "err", err)
-		return models.SearchResult{}, fmt.Errorf("%s: %w", op, err)
+	result := models.SearchResult{
+		Answer:     answer,
+		References: refs,
 	}
 
-	return models.SearchResult{
-		Answer:     answer,
-		References: processedRefs,
-	}, nil
+	// Publish search event if event publisher is available
+	if s.eventPublisher != nil {
+		searchEvent := map[string]interface{}{
+			"question":         question,
+			"answer_length":    len(answer),
+			"references_count": len(refs),
+			"operation":        "get_answer",
+		}
+		if err := s.eventPublisher.PublishEvent(ctx, "search", "search.performed", searchEvent); err != nil {
+			slog.WarnContext(ctx, "Failed to publish search event", "error", err)
+			// Don't fail the main operation if event publishing fails
+		}
+	}
+
+	return result, nil
 }
 
 func (s *Service) SemanticSearch(ctx context.Context, query string) ([]models.Reference, error) {
@@ -151,75 +160,22 @@ func (s *Service) SemanticSearch(ctx context.Context, query string) ([]models.Re
 			return nil, fmt.Errorf("%s: %w", op, err)
 		}
 
-		slog.DebugContext(ctx, "Adding resource IDs to references",
-			"references_count", len(references))
-		references, err = s.processReferences(ctx, references)
-		if err != nil {
-			slog.ErrorContext(ctx, "Failed to provide references with resource IDs",
-				"op", op,
-				"error", err)
-			return nil, fmt.Errorf("%s: %w", op, err)
-		}
-
 		slog.InfoContext(ctx, "Semantic search completed",
 			"references_count", len(references))
-		return references, nil
-	}
-}
 
-func (s *Service) processResult(ctx context.Context, result models.SearchResult) (models.SearchResult, error) {
-	const op = "Service.processResult"
-	slog.DebugContext(ctx, "Processing search result",
-		"references_count", len(result.References))
-	select {
-	case <-ctx.Done():
-		return models.SearchResult{}, ctx.Err()
-	default:
-		refs, err := s.processReferences(ctx, result.References)
-		if err != nil {
-			slog.ErrorContext(ctx, "Failed to provide references with resource IDs",
-				"op", op,
-				"error", err)
-			return models.SearchResult{}, fmt.Errorf("%s: %w", op, err)
-		}
-
-		result.References = refs
-		slog.DebugContext(ctx, "Result processing completed")
-		return result, nil
-	}
-}
-
-func (s *Service) processReferences(ctx context.Context, refs []models.Reference) ([]models.Reference, error) {
-	const op = "Service.processReferences"
-	slog.DebugContext(ctx, "Adding resource IDs to references",
-		"references_count", len(refs))
-
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	default:
-		for i, ref := range refs {
-			slog.DebugContext(ctx, "Getting resource ID for reference",
-				"reference_index", i,
-				"content_length", len(ref.Content))
-
-			resID, err := s.repository.GetResourceIDByReference(ctx, ref)
-			if err != nil {
-				slog.ErrorContext(ctx, "Failed to get resource ID for reference",
-					"op", op,
-					"reference_index", i,
-					"error", err)
-				return nil, fmt.Errorf("%s: %w", op, err)
+		// Publish semantic search event if event publisher is available
+		if s.eventPublisher != nil {
+			searchEvent := map[string]interface{}{
+				"query":            query,
+				"references_count": len(references),
+				"operation":        "semantic_search",
 			}
-
-			refs[i].ResourceID = resID
-			slog.DebugContext(ctx, "Added resource ID to reference",
-				"reference_index", i,
-				"resource_id", resID)
+			if err := s.eventPublisher.PublishEvent(ctx, "search", "search.semantic_performed", searchEvent); err != nil {
+				slog.WarnContext(ctx, "Failed to publish semantic search event", "error", err)
+				// Don't fail the main operation if event publishing fails
+			}
 		}
 
-		slog.DebugContext(ctx, "Successfully added resource IDs to all references",
-			"references_count", len(refs))
-		return refs, nil
+		return references, nil
 	}
 }
