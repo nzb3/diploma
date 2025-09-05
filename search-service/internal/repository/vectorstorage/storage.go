@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/google/uuid"
+
 	"github.com/samber/lo"
 	"github.com/tmc/langchaingo/chains"
 	"github.com/tmc/langchaingo/documentloaders"
@@ -22,10 +24,12 @@ import (
 	"github.com/nzb3/diploma/search-service/internal/controllers/middleware"
 	"github.com/nzb3/diploma/search-service/internal/domain/models"
 	"github.com/nzb3/diploma/search-service/internal/domain/services/searchservice"
+	"github.com/nzb3/diploma/search-service/internal/repository/postgres"
 	"github.com/nzb3/diploma/search-service/internal/repository/vectorstorage/callback"
 )
 
 const userIDFilter = "user_id"
+const resourceIdFilter = "resource_id"
 
 type Error error
 
@@ -36,7 +40,7 @@ type VectorStorage struct {
 	cfg         *Config
 }
 
-func NewVectorStorage(ctx context.Context, cfg *Config, embedder embeddings.Embedder, generator llms.Model) (*VectorStorage, error) {
+func NewVectorStorage(ctx context.Context, vectorStorageCfg *Config, databaseCfg *postgres.Config, embedder embeddings.Embedder, generator llms.Model) (*VectorStorage, error) {
 	const op = "NewStorage"
 
 	store, err := pgvector.New(
@@ -44,9 +48,9 @@ func NewVectorStorage(ctx context.Context, cfg *Config, embedder embeddings.Embe
 		pgvector.WithCollectionTableName("collections"),
 		pgvector.WithEmbeddingTableName("embeddings"),
 		pgvector.WithPreDeleteCollection(false),
-		pgvector.WithVectorDimensions(cfg.EmbeddingDimensions),
+		pgvector.WithVectorDimensions(vectorStorageCfg.EmbeddingDimensions),
 		pgvector.WithEmbedder(embedder),
-		pgvector.WithConnectionURL(cfg.PostgresURL),
+		pgvector.WithConnectionURL(databaseCfg.GetConnectionString()),
 	)
 
 	if err != nil {
@@ -60,7 +64,7 @@ func NewVectorStorage(ctx context.Context, cfg *Config, embedder embeddings.Embe
 		vectorStore: &store,
 		embedder:    embedder,
 		generator:   generator,
-		cfg:         cfg,
+		cfg:         vectorStorageCfg,
 	}, nil
 }
 
@@ -72,27 +76,7 @@ func (s *VectorStorage) PutResource(ctx context.Context, resource models.Resourc
 
 	slog.DebugContext(ctx, "Handling resource",
 		"content_length", len(resource.ExtractedContent))
-	chunkIDs, err := s.PutText(ctx, resource.ExtractedContent)
-
-	if err != nil {
-		slog.ErrorContext(ctx, "Failed to process resource",
-			"op", op,
-			"type", resource.Type,
-			"error", err)
-		return nil, fmt.Errorf("%s: %w", op, err)
-	}
-
-	slog.InfoContext(ctx, "Successfully processed resource",
-		"chunks_count", len(chunkIDs),
-		"resource_type", resource.Type)
-	return chunkIDs, nil
-}
-
-func (s *VectorStorage) PutText(ctx context.Context, text string) ([]string, error) {
-	const op = "VectorStorage.PutText"
-	slog.DebugContext(ctx, "Processing text content",
-		"content_length", len(text))
-	text = clearText(text)
+	text := clearText(resource.ExtractedContent)
 	docs, err := documentloaders.NewText(strings.NewReader(text)).
 		LoadAndSplit(
 			ctx,
@@ -106,16 +90,6 @@ func (s *VectorStorage) PutText(ctx context.Context, text string) ([]string, err
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
-	slog.DebugContext(ctx, "Adding text documents to vector store",
-		"documents_count", len(docs))
-	return s.addDocuments(ctx, docs)
-}
-
-func (s *VectorStorage) addDocuments(ctx context.Context, docs []schema.Document) ([]string, error) {
-	const op = "VectorStorage.addDocuments"
-	slog.DebugContext(ctx, "Adding documents to vector store",
-		"documents_count", len(docs))
-
 	userID, err := getUserID(ctx)
 	if err != nil {
 		slog.ErrorContext(ctx, "Error getting user ID",
@@ -127,11 +101,12 @@ func (s *VectorStorage) addDocuments(ctx context.Context, docs []schema.Document
 
 	for i := range docs {
 		docs[i].Metadata = map[string]any{
-			userIDFilter: userID,
+			userIDFilter:     userID,
+			resourceIdFilter: resource.ID.String(),
 		}
 	}
 
-	ids, err := s.vectorStore.AddDocuments(ctx, docs)
+	chunkIDs, err := s.vectorStore.AddDocuments(ctx, docs)
 	if err != nil {
 		slog.ErrorContext(ctx, "Failed to add documents",
 			"op", op,
@@ -139,9 +114,10 @@ func (s *VectorStorage) addDocuments(ctx context.Context, docs []schema.Document
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
-	slog.InfoContext(ctx, "Documents added successfully",
-		"documents_count", len(ids))
-	return ids, nil
+	slog.InfoContext(ctx, "Successfully processed resource",
+		"chunks_count", len(chunkIDs),
+		"resource_type", resource.Type)
+	return chunkIDs, nil
 }
 
 func (s *VectorStorage) SemanticSearch(ctx context.Context, query string) ([]models.Reference, error) {
@@ -405,9 +381,12 @@ func parseReferences(docs []schema.Document) []models.Reference {
 	slog.DebugContext(context.Background(), "Parsing references",
 		"documents_count", len(docs))
 	return lo.Map(docs, func(doc schema.Document, _ int) models.Reference {
+		stringId := doc.Metadata[resourceIdFilter].(string)
+		uuidId := uuid.MustParse(stringId)
 		return models.Reference{
-			Content: doc.PageContent,
-			Score:   doc.Score,
+			ResourceID: uuidId,
+			Content:    doc.PageContent,
+			Score:      doc.Score,
 		}
 	})
 }
