@@ -14,10 +14,10 @@ FROM alpine AS debug
 WORKDIR /app
 RUN apk add mupdf-dev=1.24.10-r0 --repository=https://dl-cdn.alpinelinux.org/alpine/v3.21/community
 COPY --from=builder-debug /app/server .
-COPY --from=builder-debug /app/configs/ ./configs
 COPY --from=builder-debug /go/bin/dlv .
-EXPOSE 8081 40000
-CMD ["./dlv", "--listen=:40000", "--headless=true", "--api-version=2", "--accept-multiclient", "exec", "./server"]
+COPY --from=builder-debug /app/configs/config.yml .
+EXPOSE 8082 40001
+CMD ["./dlv", "--listen=:40001", "--headless=true", "--api-version=2", "--accept-multiclient", "exec", "./server"]
 
 # Release build stage
 FROM golang:1.24.0-alpine AS builder-release
@@ -35,6 +35,6 @@ ENV GIN_MODE=release
 WORKDIR /app
 RUN apk add mupdf-dev=1.24.10-r0 --repository=https://dl-cdn.alpinelinux.org/alpine/v3.21/community
 COPY --from=builder-release /app/server .
-COPY --from=builder-release /app/configs/ ./configs
-EXPOSE 8081
+COPY --from=builder-release /app/configs/config.yml .
+EXPOSE 8082
 CMD ["./server"]

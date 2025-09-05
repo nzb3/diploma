@@ -1,0 +1,8 @@
+services:
+  resource-service:
+    build:
+      target: debug
+    environment:
+      - GIN_DEBUG=true
+    ports:
+      - "40001:40001"

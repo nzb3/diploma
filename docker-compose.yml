@@ -46,7 +46,7 @@ services:
     container_name: search-service
     restart: on-failure
     env_file:
-      - search-service/.env
+      - ./.env
     ports:
       - "8081:8081"
     depends_on:
@@ -55,6 +55,8 @@ services:
       ollama-generator:
         condition: service_started
       search-database:
+        condition: service_healthy
+      kafka:
         condition: service_healthy
     networks:
       webservices:
@@ -101,10 +103,12 @@ services:
     container_name: resource-service
     restart: on-failure
     env_file:
-      - resource-service/.env
+      - ./.env
     ports:
       - "8082:8082"
     depends_on:
+      search-service:
+        condition: service_started
       resource-database:
         condition: service_healthy
       kafka:

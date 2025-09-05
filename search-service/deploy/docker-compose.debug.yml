@@ -1,0 +1,8 @@
+services:
+  search-service:
+    build:
+      target: debug
+    environment:
+      - GIN_DEBUG=true
+    ports:
+      - "40000:40000"
